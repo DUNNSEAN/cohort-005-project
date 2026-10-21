@@ -7,27 +7,7 @@ import { Card, CardContent } from "~/components/ui/card";
 import { Textarea } from "~/components/ui/textarea";
 import { UserAvatar } from "~/components/user-avatar";
 import { cn, formatRelativeTime } from "~/lib/utils";
-import { MAX_COMMENT_LENGTH } from "~/lib/comments";
-
-// Bodies arrive pre-rendered from the server (renderComment), because comments
-// are untrusted markdown and the sanitising renderer is server-only.
-export type RenderedComment = {
-  id: number;
-  /** Raw markdown — only used to populate the edit box. */
-  body: string;
-  bodyHtml: string;
-  createdAt: string;
-  editedAt: string | null;
-  deleted: boolean;
-  author: {
-    id: number;
-    name: string;
-    avatarUrl: string | null;
-    isInstructor: boolean;
-    isPlatformAdmin: boolean;
-  };
-  replies: RenderedComment[];
-};
+import { MAX_COMMENT_LENGTH, type RenderedComment } from "~/lib/comments";
 
 function AuthorBadge({ label }: { label: string }) {
   return (
