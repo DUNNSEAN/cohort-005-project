@@ -64,6 +64,7 @@ async function seed() {
 
   // Drop and recreate tables for a clean seed
   sqlite.exec(`
+    DROP TABLE IF EXISTS notifications;
     DROP TABLE IF EXISTS comments;
     DROP TABLE IF EXISTS course_ratings;
     DROP TABLE IF EXISTS video_watch_events;
@@ -1993,6 +1994,24 @@ This course is still in draft while the cluster examples are rewritten against t
     `Created ${countRows(schema.comments)} lesson comments across ${countRows(schema.comments, isNull(schema.comments.parentId))} threads.`
   );
 
+  // ─── Notifications ───
+  // The comments above were inserted directly, not through createComment, so
+  // give each post's author the Discussion Reply Notifications createComment
+  // would have written. Replies from the last week stay unread so the bell has
+  // something to show.
+  sqlite.exec(`
+    INSERT INTO notifications (recipient_id, kind, subject_id, created_at, read_at)
+    SELECT parent.user_id, 'discussion_reply', reply.id, reply.created_at,
+      CASE WHEN reply.created_at < '${daysAgo(7)}' THEN reply.created_at END
+    FROM comments reply
+    JOIN comments parent ON parent.id = reply.parent_id
+    WHERE reply.user_id <> parent.user_id;
+  `);
+
+  console.log(
+    `Created ${countRows(schema.notifications)} notifications (${countRows(schema.notifications, isNull(schema.notifications.readAt))} unread).`
+  );
+
   // ─── Lesson Progress ───
 
   // Helper to mark lessons as complete
@@ -2814,6 +2833,7 @@ This course is still in draft while the cluster examples are rewritten against t
   console.log(`  Enrollments: ${countRows(schema.enrollments)}`);
   console.log(`  Course ratings: ${countRows(schema.courseRatings)}`);
   console.log(`  Lesson comments: ${countRows(schema.comments)}`);
+  console.log(`  Notifications: ${countRows(schema.notifications)}`);
   console.log(
     `  Lesson progress: ${countRows(schema.lessonProgress)} (${countRows(schema.lessonProgress, eq(schema.lessonProgress.status, LessonProgressStatus.Completed))} completed)`
   );
