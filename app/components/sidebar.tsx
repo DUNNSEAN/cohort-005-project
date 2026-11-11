@@ -41,6 +41,10 @@ interface SidebarProps {
   currentUser: CurrentUser | null;
   recentCourses?: RecentCourse[];
   isTeamAdmin?: boolean;
+  // PROTOTYPE slots for the notification bell variants (throwaway)
+  headerSlot?: React.ReactNode;
+  navSlot?: React.ReactNode;
+  footerSlot?: React.ReactNode;
 }
 
 interface NavItem {
@@ -117,6 +121,9 @@ export function Sidebar({
   currentUser,
   recentCourses = [],
   isTeamAdmin = false,
+  headerSlot,
+  navSlot,
+  footerSlot,
 }: SidebarProps) {
   const currentUserRole = currentUser?.role ?? null;
   const [isDark, setIsDark] = useState(false);
@@ -140,9 +147,11 @@ export function Sidebar({
         <NavLink to="/" className="text-lg font-bold tracking-tight">
           Cadence
         </NavLink>
+        {headerSlot}
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
+        {navSlot}
         {navItems
           .filter((item) => isVisible(item, currentUserRole))
           .map((item) => (
@@ -249,6 +258,7 @@ export function Sidebar({
             >
               <Settings className="size-4" />
             </NavLink>
+            {footerSlot}
             <Form method="post" action="/api/logout">
               <button
                 type="submit"

@@ -1,4 +1,13 @@
-import { Outlet } from "react-router";
+import { Outlet, useSearchParams } from "react-router";
+import { PrototypeSwitcher } from "~/components/prototype-switcher";
+import { useProtoFeed } from "~/components/prototype-notifications/use-proto-feed";
+import {
+  variantNames,
+  VariantAHeaderBell,
+  VariantBTopBar,
+  VariantCAvatarBell,
+  VariantDNavItem,
+} from "~/components/prototype-notifications/variants";
 import type { Route } from "./+types/layout.app";
 import { Sidebar } from "~/components/sidebar";
 import { DevUI } from "~/components/dev-ui";
@@ -227,16 +236,47 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     isTeamAdmin: userIsTeamAdmin,
   } = loaderData;
 
+  // PROTOTYPE: notification bell variants, ?variant=A|B|C|D (throwaway)
+  const [searchParams] = useSearchParams();
+  const variant = searchParams.get("variant") ?? "A";
+  const feed = useProtoFeed(currentUser?.role ?? null);
+  const showBell = !!currentUser;
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         currentUser={currentUser}
         recentCourses={recentCourses}
         isTeamAdmin={userIsTeamAdmin}
+        headerSlot={showBell && variant === "A" && <VariantAHeaderBell feed={feed} />}
+        navSlot={showBell && variant === "D" && <VariantDNavItem feed={feed} />}
+        footerSlot={showBell && variant === "C" && <VariantCAvatarBell feed={feed} />}
       />
       <main className="flex-1 overflow-y-auto">
+        {showBell && variant === "B" && <VariantBTopBar feed={feed} />}
         <Outlet />
       </main>
+      <PrototypeSwitcher
+        variants={["A", "B", "C", "D"]}
+        names={variantNames}
+        toggles={[
+          {
+            param: "as",
+            options: [
+              { value: null, label: "Current user" },
+              { value: "student", label: "Student" },
+              { value: "instructor", label: "Instructor" },
+            ],
+          },
+          {
+            param: "empty",
+            options: [
+              { value: null, label: "Has items" },
+              { value: "1", label: "Empty" },
+            ],
+          },
+        ]}
+      />
       <DevUI
         users={users}
         currentUser={currentUser}
