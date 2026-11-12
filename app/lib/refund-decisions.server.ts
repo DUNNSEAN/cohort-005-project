@@ -9,7 +9,9 @@ import {
   purchases,
   refundRequests,
   RefundRequestStatus,
+  NotificationKind,
 } from "~/db/schema";
+import { createNotifications } from "~/lib/notifications.server";
 
 // ─── Deciding Refund Requests ───
 // A Platform Admin approves or declines an Open Refund Request. Each function
@@ -108,6 +110,11 @@ export function declineRefundRequest(
     .returning()
     .get();
 
+  createNotifications(tx, {
+    kind: NotificationKind.RefundDecision,
+    refundRequestId,
+  });
+
   return { ok: true, refundRequest, purchase: found.purchase };
 }
 
@@ -187,6 +194,11 @@ export function approveRefundRequest(
     .where(eq(refundRequests.id, refundRequestId))
     .returning()
     .get();
+
+  createNotifications(tx, {
+    kind: NotificationKind.RefundDecision,
+    refundRequestId,
+  });
 
   return { ok: true, refundRequest, purchase };
 }

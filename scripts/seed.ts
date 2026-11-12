@@ -2868,18 +2868,38 @@ This course is still in draft while the cluster examples are rewritten against t
   db.insert(schema.enrollments)
     .values({ userId: maya.id, courseId: course1.id, enrolledAt: daysAgo(2) })
     .run();
-  db.insert(schema.refundRequests)
-    .values({
-      purchaseId: mayasPurchase.id,
-      status: RefundRequestStatus.Declined,
-      reason: "Changed my mind.",
-      declineReason:
-        "Tell us what isn't working for you and we'll take another look.",
-      requestedAt: daysAgo(1),
-      resolvedAt: daysAgo(1),
-      resolvedByUserId: admin.id,
-    })
-    .run();
+  // The decision notifies Maya through createNotifications, as a real one
+  // does (ADR 0013), backdated to when it was made and left unread.
+  const mayasDecisionAt = daysAgo(1);
+  db.transaction((tx) => {
+    const declined = tx
+      .insert(schema.refundRequests)
+      .values({
+        purchaseId: mayasPurchase.id,
+        status: RefundRequestStatus.Declined,
+        reason: "Changed my mind.",
+        declineReason:
+          "Tell us what isn't working for you and we'll take another look.",
+        requestedAt: daysAgo(1),
+        resolvedAt: mayasDecisionAt,
+        resolvedByUserId: admin.id,
+      })
+      .returning()
+      .get();
+    createNotifications(tx, {
+      kind: NotificationKind.RefundDecision,
+      refundRequestId: declined.id,
+    });
+    tx.update(schema.notifications)
+      .set({ createdAt: mayasDecisionAt })
+      .where(
+        and(
+          eq(schema.notifications.kind, NotificationKind.RefundDecision),
+          eq(schema.notifications.subjectId, declined.id)
+        )
+      )
+      .run();
+  });
 
   // ─── Flush watch events ───
   // Batched: the heartbeat makes these by far the largest table, and one

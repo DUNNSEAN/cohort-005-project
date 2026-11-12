@@ -9,6 +9,10 @@ import {
   getSeatFreeze,
   listOpenRefundRequests,
 } from "./refund-decisions.server";
+import {
+  countUnreadNotifications,
+  listNotifications,
+} from "./notifications.server";
 
 type TestDb = ReturnType<typeof createTestDb>;
 
@@ -421,5 +425,111 @@ describe("listOpenRefundRequests", () => {
         canApprove: false,
       },
     ]);
+  });
+});
+
+describe("refund_decision", () => {
+  it("tells the buyer their Refund Request was approved, though they are now a Lapsed Student", () => {
+    const { refundRequest } = individualPurchaseWithOpenRequest();
+
+    db.transaction((tx) =>
+      approveRefundRequest(tx, refundRequest.id, platformAdmin.id, NOW)
+    );
+
+    expect(isEnrolled(base.user.id, base.course.id)).toBe(false);
+    expect(listNotifications(db, base.user.id)).toEqual([
+      expect.objectContaining({
+        kind: schema.NotificationKind.RefundDecision,
+        actorName: null,
+        action: "Your Refund Request for Test Course was approved",
+        quote: null,
+        courseTitle: "Test Course",
+        lessonTitle: null,
+        href: "/courses/test-course",
+        read: false,
+      }),
+    ]);
+    expect(countUnreadNotifications(db, base.user.id)).toBe(1);
+  });
+
+  it("tells the buyer their Refund Request was declined", () => {
+    const { refundRequest } = individualPurchaseWithOpenRequest();
+
+    db.transaction((tx) =>
+      declineRefundRequest(tx, refundRequest.id, platformAdmin.id, "No.", NOW)
+    );
+
+    expect(listNotifications(db, base.user.id)).toEqual([
+      expect.objectContaining({
+        kind: schema.NotificationKind.RefundDecision,
+        action: "Your Refund Request for Test Course was declined",
+        href: "/courses/test-course",
+        read: false,
+      }),
+    ]);
+    expect(countUnreadNotifications(db, base.user.id)).toBe(1);
+  });
+
+  it("notifies nobody about a decision on a Team Licence", () => {
+    const approved = teamLicenceWithOpenRequest();
+    const declined = teamLicenceWithOpenRequest();
+
+    db.transaction((tx) => {
+      approveRefundRequest(tx, approved.refundRequest.id, platformAdmin.id, NOW);
+      declineRefundRequest(
+        tx,
+        declined.refundRequest.id,
+        platformAdmin.id,
+        "No.",
+        NOW
+      );
+    });
+
+    expect(listNotifications(db, base.user.id)).toEqual([]);
+    expect(listNotifications(db, platformAdmin.id)).toEqual([]);
+    expect(countUnreadNotifications(db, base.user.id)).toBe(0);
+  });
+
+  it("notifies nobody when the decision is refused", () => {
+    const { refundRequest } = individualPurchaseWithOpenRequest();
+    db.transaction((tx) =>
+      declineRefundRequest(tx, refundRequest.id, platformAdmin.id, "   ", NOW)
+    );
+
+    expect(listNotifications(db, base.user.id)).toEqual([]);
+  });
+
+  it("doesn't notify a Platform Admin who decides their own Refund Request", () => {
+    const purchase = db
+      .insert(schema.purchases)
+      .values({
+        userId: platformAdmin.id,
+        courseId: base.course.id,
+        amountPaid: 7900,
+      })
+      .returning()
+      .get();
+    const refundRequest = db
+      .insert(schema.refundRequests)
+      .values({ purchaseId: purchase.id, reason: "Testing." })
+      .returning()
+      .get();
+
+    db.transaction((tx) =>
+      approveRefundRequest(tx, refundRequest.id, platformAdmin.id, NOW)
+    );
+
+    expect(listNotifications(db, platformAdmin.id)).toEqual([]);
+  });
+
+  it("tells the instructor and other people nothing", () => {
+    const { refundRequest } = individualPurchaseWithOpenRequest();
+
+    db.transaction((tx) =>
+      approveRefundRequest(tx, refundRequest.id, platformAdmin.id, NOW)
+    );
+
+    expect(listNotifications(db, base.instructor.id)).toEqual([]);
+    expect(listNotifications(db, platformAdmin.id)).toEqual([]);
   });
 });

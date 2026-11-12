@@ -1,14 +1,18 @@
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   comments,
+  coupons,
   courseRatings,
   courses,
   enrollments,
   lessons,
   modules,
   notifications,
+  purchases,
+  refundRequests,
   users,
   NotificationKind,
+  RefundRequestStatus,
   UserRole,
 } from "~/db/schema";
 import type { Queryable, Tx } from "~/db";
@@ -71,7 +75,7 @@ function audienceFor(tx: Tx, event: NotificationEvent): Audience | null {
     case NotificationKind.DiscussionQuestion:
       return discussionQuestionAudience(tx, event.commentId);
     case NotificationKind.RefundDecision:
-      return null;
+      return refundDecisionAudience(tx, event.refundRequestId);
     case NotificationKind.Enrollment:
       return enrollmentAudience(tx, event.enrollmentId);
     case NotificationKind.FirstRating:
@@ -120,13 +124,11 @@ type FeedContentLoader = (
   viewerId: number
 ) => Map<number, FeedItemContent>;
 
-const noContent: FeedContentLoader = () => new Map();
-
 // One entry per kind. Each kind's rendering lives in its own function below.
 const feedContentLoaders: Record<NotificationKind, FeedContentLoader> = {
   [NotificationKind.DiscussionReply]: discussionReplyFeedContent,
   [NotificationKind.DiscussionQuestion]: discussionQuestionFeedContent,
-  [NotificationKind.RefundDecision]: noContent,
+  [NotificationKind.RefundDecision]: refundDecisionFeedContent,
   [NotificationKind.Enrollment]: enrollmentFeedContent,
   [NotificationKind.FirstRating]: firstRatingFeedContent,
 };
@@ -590,6 +592,84 @@ function enrollmentFeedContent(
         href: `/instructor/${row.courseId}/students`,
       },
     ])
+  );
+}
+
+// ─── refund_decision: a Platform Admin's decision; the subject is the Refund Request ───
+
+function refundDecisionAudience(
+  tx: Tx,
+  refundRequestId: number
+): Audience | null {
+  const request = tx
+    .select({
+      purchaseId: purchases.id,
+      buyerId: purchases.userId,
+      status: refundRequests.status,
+      resolvedByUserId: refundRequests.resolvedByUserId,
+    })
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
+    .where(eq(refundRequests.id, refundRequestId))
+    .get();
+  if (!request || request.status === RefundRequestStatus.Open) return null;
+  if (request.resolvedByUserId === null) return null;
+
+  // A Team Licence is the Purchase that granted Seats. Its decisions notify
+  // nobody: only Individual Purchases are in scope.
+  const seat = tx
+    .select({ id: coupons.id })
+    .from(coupons)
+    .where(eq(coupons.purchaseId, request.purchaseId))
+    .get();
+  if (seat) return null;
+
+  // No Lapsed check: the buyer hears the outcome even after approval ends
+  // their Enrollment.
+  return {
+    subjectId: refundRequestId,
+    actorId: request.resolvedByUserId,
+    recipientIds: [request.buyerId],
+  };
+}
+
+function refundDecisionFeedContent(
+  db: Queryable,
+  refundRequestIds: number[]
+): Map<number, FeedItemContent> {
+  const rows = db
+    .select({
+      id: refundRequests.id,
+      status: refundRequests.status,
+      courseTitle: courses.title,
+      courseSlug: courses.slug,
+    })
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
+    .innerJoin(courses, eq(purchases.courseId, courses.id))
+    .where(inArray(refundRequests.id, refundRequestIds))
+    .all();
+
+  // Worded from the Refund Request's status now, so the sentence never goes
+  // stale. An Open one has no decision to report.
+  return new Map(
+    rows.flatMap((row) =>
+      row.status === RefundRequestStatus.Open
+        ? []
+        : [
+            [
+              row.id,
+              {
+                actorName: null,
+                action: `Your Refund Request for ${row.courseTitle} was ${row.status}`,
+                quote: null,
+                courseTitle: row.courseTitle,
+                lessonTitle: null,
+                href: `/courses/${row.courseSlug}`,
+              },
+            ] as const,
+          ]
+    )
   );
 }
 
