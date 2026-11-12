@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { courses, enrollments, NotificationKind } from "~/db/schema";
+import { coupons, courses, enrollments, NotificationKind } from "~/db/schema";
 import type { Tx } from "~/db";
 import { createNotifications } from "~/lib/notifications.server";
 
@@ -43,4 +43,24 @@ export function enrollStudent(tx: Tx, userId: number, courseId: number) {
   });
 
   return enrollment;
+}
+
+/**
+ * Claims a Seat for a person and enrols them on its course. Runs inside the
+ * caller's transaction, so the claim, the Enrollment and its Notification
+ * commit or roll back together. Throws an Error with a user-facing message
+ * when the Seat doesn't exist or the person can't be enrolled.
+ */
+export function claimSeat(tx: Tx, seatId: number, userId: number) {
+  const seat = tx
+    .update(coupons)
+    .set({ redeemedByUserId: userId, redeemedAt: new Date().toISOString() })
+    .where(eq(coupons.id, seatId))
+    .returning({ courseId: coupons.courseId })
+    .get();
+  if (!seat) {
+    throw new Error("Coupon not found");
+  }
+
+  return enrollStudent(tx, userId, seat.courseId);
 }

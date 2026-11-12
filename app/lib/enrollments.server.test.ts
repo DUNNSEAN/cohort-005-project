@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { eq } from "drizzle-orm";
 import { createTestDb, seedBaseData } from "~/test/setup";
 import * as schema from "~/db/schema";
-import { enrollStudent } from "./enrollments.server";
+import { claimSeat, enrollStudent } from "./enrollments.server";
 import {
   countUnreadNotifications,
   listNotifications,
@@ -47,10 +46,10 @@ describe("enrollment", () => {
 
   it("tells the Instructor once when a Student claims a Seat", () => {
     const buyer = addStudent("Team Buyer");
-    const code = buySeat(buyer.id);
+    const seatId = buySeat(buyer.id);
     const learner = addStudent("Seat Holder");
 
-    claimSeat(code, learner.id);
+    claimSeatFor(seatId, learner.id);
 
     expect(listNotifications(testDb, base.instructor.id)).toEqual([
       expect.objectContaining({
@@ -100,7 +99,7 @@ function addStudent(name: string) {
     .get();
 }
 
-/** A Team Licence with one Seat; returns the Seat's code. */
+/** A Team Licence with one Seat; returns the Seat's id. */
 function buySeat(buyerId: number) {
   const team = testDb.insert(schema.teams).values({}).returning().get();
   const purchase = testDb
@@ -117,16 +116,10 @@ function buySeat(buyerId: number) {
       purchaseId: purchase.id,
     })
     .returning()
-    .get().code;
+    .get().id;
 }
 
 /** A Claimed Seat, as the redeem page records it. */
-function claimSeat(code: string, userId: number) {
-  return testDb.transaction((tx) => {
-    tx.update(schema.coupons)
-      .set({ redeemedByUserId: userId, redeemedAt: new Date().toISOString() })
-      .where(eq(schema.coupons.code, code))
-      .run();
-    return enrollStudent(tx, userId, base.course.id);
-  });
+function claimSeatFor(seatId: number, userId: number) {
+  return testDb.transaction((tx) => claimSeat(tx, seatId, userId));
 }
