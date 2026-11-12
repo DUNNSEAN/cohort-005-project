@@ -2,7 +2,10 @@ import { eq } from "drizzle-orm";
 import type { db } from "~/db";
 import { comments, lessons, NotificationKind } from "~/db/schema";
 import { MAX_COMMENT_LENGTH, MIN_COMMENT_LENGTH } from "~/lib/comments";
-import { createNotifications } from "~/lib/notifications.server";
+import {
+  createNotifications,
+  markThreadNotificationsRead,
+} from "~/lib/notifications.server";
 
 /** A Drizzle transaction, as handed to the callback of `db.transaction`. */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -72,6 +75,13 @@ export function createComment(tx: Tx, input: NewComment) {
         : NotificationKind.DiscussionReply,
     commentId: comment.id,
   });
+
+  // Replying to a thread means the replier has seen it, so their own
+  // Notifications about it are read. Kept apart from createNotifications,
+  // which only ever creates.
+  if (comment.parentId !== null) {
+    markThreadNotificationsRead(tx, userId, comment.parentId);
+  }
 
   return comment;
 }

@@ -390,3 +390,70 @@ describe("marking all Notifications read", () => {
     expect(countUnreadNotifications(testDb, peer.id)).toBe(1);
   });
 });
+
+describe("replying marks the thread read", () => {
+  it("clears the Instructor's Notifications for a thread when they answer it", () => {
+    const peer = addStudent("Priya Shah");
+    enroll(peer.id);
+    const question = post(base.user.id, null, "Why use generics?");
+    post(peer.id, question.id, "Me too, I'm stuck.");
+    expect(countUnreadNotifications(testDb, base.instructor.id)).toBe(2);
+
+    post(base.instructor.id, question.id, "To keep types precise.");
+
+    expect(countUnreadNotifications(testDb, base.instructor.id)).toBe(0);
+    expect(
+      listNotifications(testDb, base.instructor.id).map((item) => [
+        item.kind,
+        item.read,
+      ])
+    ).toEqual([
+      [schema.NotificationKind.DiscussionReply, true],
+      [schema.NotificationKind.DiscussionQuestion, true],
+    ]);
+  });
+
+  it("clears a Student's own Notifications for a thread when they reply in it", () => {
+    const question = post(base.user.id, null, "Why use generics?");
+    post(base.instructor.id, question.id, "First answer.");
+    post(base.instructor.id, question.id, "Second answer.");
+    expect(countUnreadNotifications(testDb, base.user.id)).toBe(2);
+
+    post(base.user.id, question.id, "Thanks, that makes sense.");
+
+    expect(countUnreadNotifications(testDb, base.user.id)).toBe(0);
+  });
+
+  it("leaves other people's Notifications and other threads unread", () => {
+    const peer = addStudent("Priya Shah");
+    enroll(peer.id);
+    const mine = post(base.user.id, null, "Why use generics?");
+    const theirs = post(peer.id, null, "What about type guards?");
+    post(base.user.id, theirs.id, "Good question.");
+    expect(countUnreadNotifications(testDb, base.instructor.id)).toBe(3);
+
+    post(base.instructor.id, mine.id, "To keep types precise.");
+
+    expect(
+      listNotifications(testDb, base.instructor.id).map((item) => [
+        item.quote,
+        item.read,
+      ])
+    ).toEqual([
+      ["Good question.", false],
+      ["What about type guards?", false],
+      ["Why use generics?", true],
+    ]);
+    expect(countUnreadNotifications(testDb, peer.id)).toBe(1);
+    expect(countUnreadNotifications(testDb, base.user.id)).toBe(1);
+  });
+
+  it("leaves the Instructor's Notification unread when a Platform Admin answers", () => {
+    const admin = addAdmin("Pat Admin");
+    const question = post(base.user.id, null, "Why use generics?");
+
+    post(admin.id, question.id, "See the TypeScript handbook.");
+
+    expect(countUnreadNotifications(testDb, base.instructor.id)).toBe(1);
+  });
+});

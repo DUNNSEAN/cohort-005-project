@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "~/db/schema";
@@ -185,6 +185,43 @@ export function markNotificationRead(
         eq(notifications.id, notificationId),
         eq(notifications.recipientId, userId),
         isNull(notifications.readAt)
+      )
+    )
+    .run();
+}
+
+/**
+ * Marks read the person's own Unread Notifications about one Discussion
+ * Question's thread: the `discussion_question` Notification for it and any
+ * `discussion_reply` Notifications on it. Called when they post a Discussion
+ * Reply there; nobody else's Notifications are touched.
+ */
+export function markThreadNotificationsRead(
+  db: Queryable,
+  userId: number,
+  threadId: number
+) {
+  const replyIds = db
+    .select({ id: comments.id })
+    .from(comments)
+    .where(eq(comments.parentId, threadId));
+
+  db.update(notifications)
+    .set({ readAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(notifications.recipientId, userId),
+        isNull(notifications.readAt),
+        or(
+          and(
+            eq(notifications.kind, NotificationKind.DiscussionQuestion),
+            eq(notifications.subjectId, threadId)
+          ),
+          and(
+            eq(notifications.kind, NotificationKind.DiscussionReply),
+            inArray(notifications.subjectId, replyIds)
+          )
+        )
       )
     )
     .run();
