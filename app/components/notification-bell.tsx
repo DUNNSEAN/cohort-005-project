@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Form } from "react-router";
+import { Form, useFetcher } from "react-router";
 import {
   Bell,
+  BellOff,
   MessageCircleQuestion,
   MessageSquareReply,
   Receipt,
@@ -9,7 +10,7 @@ import {
   UserPlus,
   type LucideIcon,
 } from "lucide-react";
-import { NotificationKind } from "~/db/schema";
+import { NotificationKind, UserRole } from "~/db/schema";
 import { cn, formatRelativeTime } from "~/lib/utils";
 import type { NotificationItem } from "~/lib/notifications.server";
 import { useUnreadCountPolling } from "./use-unread-count-polling";
@@ -17,6 +18,7 @@ import { useUnreadCountPolling } from "./use-unread-count-polling";
 export interface NotificationBellProps {
   unreadCount: number;
   items: NotificationItem[];
+  role: UserRole;
 }
 
 // One icon per kind.
@@ -29,7 +31,11 @@ const kindIcons: Record<NotificationKind, LucideIcon> = {
 };
 
 /** The bell in the sidebar header, with its popover Notification Feed. */
-export function NotificationBell({ unreadCount, items }: NotificationBellProps) {
+export function NotificationBell({
+  unreadCount,
+  items,
+  role,
+}: NotificationBellProps) {
   const [open, setOpen] = useState(false);
   useUnreadCountPolling(unreadCount);
 
@@ -65,11 +71,10 @@ export function NotificationBell({ unreadCount, items }: NotificationBellProps) 
           >
             <div className="flex items-center justify-between border-b px-4 py-2.5">
               <span className="text-sm font-semibold">Notifications</span>
+              {unreadCount > 0 && <MarkAllReadButton />}
             </div>
             {items.length === 0 ? (
-              <p className="px-4 py-10 text-center text-sm text-muted-foreground">
-                You're all caught up.
-              </p>
+              <EmptyState role={role} />
             ) : (
               <ul className="max-h-[28rem] divide-y overflow-y-auto">
                 {items.map((item) => (
@@ -83,6 +88,37 @@ export function NotificationBell({ unreadCount, items }: NotificationBellProps) 
         </>
       )}
     </>
+  );
+}
+
+/** Shown only while anything is unread; the layout reloads the count after. */
+function MarkAllReadButton() {
+  const fetcher = useFetcher();
+  return (
+    <fetcher.Form method="post" action="/api/notifications/read-all">
+      <button
+        type="submit"
+        disabled={fetcher.state !== "idle"}
+        className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
+      >
+        Mark all read
+      </button>
+    </fetcher.Form>
+  );
+}
+
+/** Says what the person would be notified about, by role. */
+function EmptyState({ role }: { role: UserRole }) {
+  const about =
+    role === UserRole.Instructor
+      ? "You'll hear about new Discussion Questions, Discussion Replies, Enrollments and first ratings on your courses."
+      : "You'll hear about Discussion Replies to your posts and Refund Request decisions.";
+  return (
+    <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
+      <BellOff className="size-6 text-muted-foreground" />
+      <p className="text-sm font-medium">You're all caught up</p>
+      <p className="text-xs text-muted-foreground">{about}</p>
+    </div>
   );
 }
 
