@@ -33,7 +33,7 @@ describe("first_rating", () => {
       expect.objectContaining({
         kind: schema.NotificationKind.FirstRating,
         actorName: "Test User",
-        action: "rated your course ★★★★☆",
+        action: "rated Test Course ★★★★☆",
         quote: null,
         courseTitle: "Test Course",
         lessonTitle: null,
@@ -68,8 +68,8 @@ describe("first_rating", () => {
         item.action,
       ])
     ).toEqual([
-      ["Priya Shah", "rated your course ★★☆☆☆"],
-      ["Test User", "rated your course ★★★★☆"],
+      ["Priya Shah", "rated Test Course ★★☆☆☆"],
+      ["Test User", "rated Test Course ★★★★☆"],
     ]);
   });
 

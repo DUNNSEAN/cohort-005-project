@@ -30,6 +30,16 @@ const kindIcons: Record<NotificationKind, LucideIcon> = {
   [NotificationKind.FirstRating]: Star,
 };
 
+// Discussion items name their course and lesson on a second line under the
+// quote. The rest name the course in the sentence and stay on one line.
+const showsContextLine: Record<NotificationKind, boolean> = {
+  [NotificationKind.DiscussionReply]: true,
+  [NotificationKind.DiscussionQuestion]: true,
+  [NotificationKind.RefundDecision]: false,
+  [NotificationKind.Enrollment]: false,
+  [NotificationKind.FirstRating]: false,
+};
+
 /** The bell in the sidebar header, with its popover Notification Feed. */
 export function NotificationBell({
   unreadCount,
@@ -158,7 +168,12 @@ function FeedItem({
       >
         <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <div className="text-sm leading-snug">
+          <div
+            className={cn(
+              "text-sm leading-snug",
+              !showsContextLine[item.kind] && "truncate"
+            )}
+          >
             {item.actorName && (
               <span className="font-semibold">{item.actorName} </span>
             )}
@@ -169,10 +184,12 @@ function FeedItem({
               {item.quote}
             </div>
           )}
-          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-            {item.courseTitle}
-            {item.lessonTitle && ` · ${item.lessonTitle}`}
-          </div>
+          {showsContextLine[item.kind] && (
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              {item.courseTitle}
+              {item.lessonTitle && ` · ${item.lessonTitle}`}
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <span
