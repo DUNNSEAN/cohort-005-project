@@ -1,14 +1,11 @@
 import { eq } from "drizzle-orm";
-import type { db } from "~/db";
+import type { Tx } from "~/db";
 import { comments, lessons, NotificationKind } from "~/db/schema";
 import { MAX_COMMENT_LENGTH, MIN_COMMENT_LENGTH } from "~/lib/comments";
 import {
   createNotifications,
   markThreadNotificationsRead,
 } from "~/lib/notifications.server";
-
-/** A Drizzle transaction, as handed to the callback of `db.transaction`. */
-export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export type NewComment = {
   userId: number;

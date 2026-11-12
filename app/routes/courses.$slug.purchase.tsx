@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import type { Route } from "./+types/courses.$slug.purchase";
 import { getCurrentUserId } from "~/lib/session";
-import { db } from "~/db";
+import { db, type Queryable } from "~/db";
 import {
   courses,
   categories,
@@ -38,7 +38,6 @@ import { formatDuration, formatPrice } from "~/lib/utils";
 import { resolveCountry } from "~/lib/country.server";
 import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
-import type { Tx } from "~/lib/comments.server";
 import { enrollStudent } from "~/lib/enrollments.server";
 
 function getCourseBySlug(slug: string) {
@@ -145,13 +144,13 @@ function getEnrollmentCountForCourse(courseId: number) {
 }
 
 function createPurchase(
-  tx: Tx | typeof db,
+  db: Queryable,
   userId: number,
   courseId: number,
   amountPaid: number,
   country: string | null
 ) {
-  return tx
+  return db
     .insert(purchases)
     .values({ userId, courseId, amountPaid, country })
     .returning()

@@ -1,7 +1,5 @@
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { alias } from "drizzle-orm/sqlite-core";
-import * as schema from "~/db/schema";
 import {
   comments,
   courseRatings,
@@ -14,11 +12,8 @@ import {
   NotificationKind,
   UserRole,
 } from "~/db/schema";
-import type { Tx } from "~/lib/comments.server";
+import type { Queryable, Tx } from "~/db";
 import { MAX_RATING } from "~/lib/ratings";
-
-type Db = BetterSQLite3Database<typeof schema>;
-type Queryable = Db | Tx;
 
 // ─── Writing: createNotifications ───
 

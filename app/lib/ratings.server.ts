@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { courseRatings, courses, NotificationKind } from "~/db/schema";
-import type { Tx } from "~/lib/comments.server";
+import type { Tx } from "~/db";
 import { createNotifications } from "~/lib/notifications.server";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
 
