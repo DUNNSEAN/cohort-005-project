@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import * as schema from "~/db/schema";
 import {
   comments,
+  courseRatings,
   courses,
   enrollments,
   lessons,
@@ -14,6 +15,7 @@ import {
   UserRole,
 } from "~/db/schema";
 import type { Tx } from "~/lib/comments.server";
+import { MAX_RATING } from "~/lib/ratings";
 
 type Db = BetterSQLite3Database<typeof schema>;
 type Queryable = Db | Tx;
@@ -81,7 +83,7 @@ function audienceFor(tx: Tx, event: NotificationEvent): Audience | null {
     case NotificationKind.Enrollment:
       return NOBODY;
     case NotificationKind.FirstRating:
-      return NOBODY;
+      return firstRatingAudience(tx, event.ratingId);
     default: {
       const unhandled: never = event;
       throw new Error(`Unhandled notification event: ${String(unhandled)}`);
@@ -134,7 +136,7 @@ const feedContentLoaders: Record<NotificationKind, FeedContentLoader> = {
   [NotificationKind.DiscussionQuestion]: discussionQuestionFeedContent,
   [NotificationKind.RefundDecision]: noContent,
   [NotificationKind.Enrollment]: noContent,
-  [NotificationKind.FirstRating]: noContent,
+  [NotificationKind.FirstRating]: firstRatingFeedContent,
 };
 
 const FEED_LIMIT = 50;
@@ -184,6 +186,19 @@ export function markNotificationRead(
         eq(notifications.recipientId, userId),
         isNull(notifications.readAt)
       )
+    )
+    .run();
+}
+
+/**
+ * Marks every Unread Notification the person has read, including ones the
+ * feed isn't showing, so the badge really goes to zero.
+ */
+export function markAllNotificationsRead(db: Queryable, userId: number) {
+  db.update(notifications)
+    .set({ readAt: new Date().toISOString() })
+    .where(
+      and(eq(notifications.recipientId, userId), isNull(notifications.readAt))
     )
     .run();
 }
@@ -426,4 +441,63 @@ function discussionQuestionFeedContent(
       },
     ])
   );
+}
+
+// ─── first_rating: a Student's first rating of a course; the subject is the rating ───
+
+function firstRatingAudience(tx: Tx, ratingId: number): Audience | null {
+  const rating = tx
+    .select({
+      id: courseRatings.id,
+      userId: courseRatings.userId,
+      instructorId: courses.instructorId,
+    })
+    .from(courseRatings)
+    .innerJoin(courses, eq(courseRatings.courseId, courses.id))
+    .where(eq(courseRatings.id, ratingId))
+    .get();
+  if (!rating) return NOBODY;
+
+  return {
+    subjectId: rating.id,
+    actorId: rating.userId,
+    recipientIds: [rating.instructorId],
+  };
+}
+
+function firstRatingFeedContent(
+  db: Queryable,
+  ratingIds: number[]
+): Map<number, FeedItemContent> {
+  const ratings = db
+    .select({
+      id: courseRatings.id,
+      rating: courseRatings.rating,
+      actorName: users.name,
+      courseTitle: courses.title,
+      courseSlug: courses.slug,
+    })
+    .from(courseRatings)
+    .innerJoin(users, eq(courseRatings.userId, users.id))
+    .innerJoin(courses, eq(courseRatings.courseId, courses.id))
+    .where(inArray(courseRatings.id, ratingIds))
+    .all();
+
+  return new Map(
+    ratings.map((rating) => [
+      rating.id,
+      {
+        actorName: rating.actorName,
+        action: `gave your course its first rating — ${stars(rating.rating)}`,
+        quote: null,
+        courseTitle: rating.courseTitle,
+        lessonTitle: null,
+        href: `/courses/${rating.courseSlug}`,
+      },
+    ])
+  );
+}
+
+function stars(rating: number) {
+  return "★".repeat(rating) + "☆".repeat(Math.max(0, MAX_RATING - rating));
 }

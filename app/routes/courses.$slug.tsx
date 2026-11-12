@@ -56,6 +56,7 @@ import {
 } from "~/lib/ppp";
 import { parseFormData } from "~/lib/validation";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
+import { rateCourse } from "~/lib/ratings.server";
 import { StarRating, StarRatingInput } from "~/components/star-rating";
 
 function getCourseBySlug(slug: string) {
@@ -332,41 +333,6 @@ function getCourseRatingSummary(courseId: number): CourseRatingSummary {
   };
 }
 
-function rateCourse(userId: number, courseId: number, rating: number) {
-  if (!Number.isInteger(rating) || rating < MIN_RATING || rating > MAX_RATING) {
-    throw new Error(
-      `Rating must be a whole number between ${MIN_RATING} and ${MAX_RATING}`
-    );
-  }
-
-  const course = db
-    .select({ id: courses.id })
-    .from(courses)
-    .where(eq(courses.id, courseId))
-    .get();
-
-  if (!course) {
-    throw new Error("Course not found");
-  }
-
-  const existing = findRating(userId, courseId);
-
-  if (existing) {
-    return db
-      .update(courseRatings)
-      .set({ rating, updatedAt: new Date().toISOString() })
-      .where(eq(courseRatings.id, existing.id))
-      .returning()
-      .get();
-  }
-
-  return db
-    .insert(courseRatings)
-    .values({ userId, courseId, rating })
-    .returning()
-    .get();
-}
-
 const CANCEL_WINDOW_DAYS = 14;
 const CANCEL_WATCH_LIMIT_SECONDS = 2 * 60 * 60;
 const CANCEL_COMPLETION_LIMIT = 0.5;
@@ -610,7 +576,9 @@ export async function action({ params, request }: Route.ActionArgs) {
     return { ok: false as const, error: "Please choose a rating from 1 to 5." };
   }
 
-  rateCourse(currentUserId, course.id, parsed.data.rating);
+  db.transaction((tx) =>
+    rateCourse(tx, currentUserId, course.id, parsed.data.rating)
+  );
 
   return { ok: true as const, error: null };
 }

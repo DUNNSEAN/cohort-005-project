@@ -223,6 +223,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       ? {
           unreadCount: countUnreadNotifications(db, currentUser.id),
           items: listNotifications(db, currentUser.id),
+          role: currentUser.role,
         }
       : null,
   };
