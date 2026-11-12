@@ -65,12 +65,13 @@ export function createComment(tx: Tx, input: NewComment) {
     .returning()
     .get();
 
-  if (comment.parentId !== null) {
-    createNotifications(tx, {
-      kind: NotificationKind.DiscussionReply,
-      commentId: comment.id,
-    });
-  }
+  createNotifications(tx, {
+    kind:
+      comment.parentId === null
+        ? NotificationKind.DiscussionQuestion
+        : NotificationKind.DiscussionReply,
+    commentId: comment.id,
+  });
 
   return comment;
 }
