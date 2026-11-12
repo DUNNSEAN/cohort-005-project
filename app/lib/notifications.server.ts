@@ -80,7 +80,7 @@ function audienceFor(tx: Tx, event: NotificationEvent): Audience | null {
     case NotificationKind.RefundDecision:
       return NOBODY;
     case NotificationKind.Enrollment:
-      return NOBODY;
+      return enrollmentAudience(tx, event.enrollmentId);
     case NotificationKind.FirstRating:
       return firstRatingAudience(tx, event.ratingId);
     default: {
@@ -134,7 +134,7 @@ const feedContentLoaders: Record<NotificationKind, FeedContentLoader> = {
   [NotificationKind.DiscussionReply]: discussionReplyFeedContent,
   [NotificationKind.DiscussionQuestion]: noContent,
   [NotificationKind.RefundDecision]: noContent,
-  [NotificationKind.Enrollment]: noContent,
+  [NotificationKind.Enrollment]: enrollmentFeedContent,
   [NotificationKind.FirstRating]: firstRatingFeedContent,
 };
 
@@ -388,6 +388,59 @@ function firstRatingFeedContent(
         courseTitle: rating.courseTitle,
         lessonTitle: null,
         href: `/courses/${rating.courseSlug}`,
+      },
+    ])
+  );
+}
+
+// ─── enrollment: a new Enrollment; the subject is the Enrollment ───
+
+function enrollmentAudience(tx: Tx, enrollmentId: number): Audience | null {
+  const enrollment = tx
+    .select({
+      userId: enrollments.userId,
+      instructorId: courses.instructorId,
+    })
+    .from(enrollments)
+    .innerJoin(courses, eq(enrollments.courseId, courses.id))
+    .where(eq(enrollments.id, enrollmentId))
+    .get();
+  if (!enrollment) return NOBODY;
+
+  return {
+    subjectId: enrollmentId,
+    actorId: enrollment.userId,
+    recipientIds: [enrollment.instructorId],
+  };
+}
+
+function enrollmentFeedContent(
+  db: Queryable,
+  enrollmentIds: number[]
+): Map<number, FeedItemContent> {
+  const rows = db
+    .select({
+      id: enrollments.id,
+      actorName: users.name,
+      courseId: courses.id,
+      courseTitle: courses.title,
+    })
+    .from(enrollments)
+    .innerJoin(users, eq(enrollments.userId, users.id))
+    .innerJoin(courses, eq(enrollments.courseId, courses.id))
+    .where(inArray(enrollments.id, enrollmentIds))
+    .all();
+
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      {
+        actorName: row.actorName,
+        action: `enrolled in ${row.courseTitle}`,
+        quote: null,
+        courseTitle: row.courseTitle,
+        lessonTitle: null,
+        href: `/instructor/${row.courseId}/students`,
       },
     ])
   );
