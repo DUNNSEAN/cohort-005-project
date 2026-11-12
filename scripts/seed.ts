@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { eq, gte, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -12,8 +12,13 @@ import {
   LessonProgressStatus,
   QuestionType,
   TeamMemberRole,
+  NotificationKind,
   RefundRequestStatus,
 } from "../app/db/schema";
+import {
+  createNotifications,
+  markDiscussionQuestionNotificationsRead,
+} from "../app/lib/notifications.server";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,6 +70,7 @@ async function seed() {
 
   // Drop and recreate tables for a clean seed
   sqlite.exec(`
+    DROP TABLE IF EXISTS notifications;
     DROP TABLE IF EXISTS comments;
     DROP TABLE IF EXISTS course_ratings;
     DROP TABLE IF EXISTS video_watch_events;
@@ -1870,9 +1876,37 @@ This course is still in draft while the cluster examples are rewritten against t
   // deleted question kept as a tombstone because it has a reply.
   // Only enrolled students comment.
 
+  // Each seeded Comment notifies people through createNotifications, the one
+  // entry point for Notifications (ADR 0013), so the seeded feeds follow the
+  // same rules as real ones. Notifications are then backdated to the Comment;
+  // those older than a week are read, newer ones stay unread for the bell.
   function comment(values: typeof schema.comments.$inferInsert) {
-    const [row] = db.insert(schema.comments).values(values).returning().all();
-    return row;
+    return db.transaction((tx) => {
+      const row = tx.insert(schema.comments).values(values).returning().get();
+      const kind =
+        row.parentId === null
+          ? NotificationKind.DiscussionQuestion
+          : NotificationKind.DiscussionReply;
+      createNotifications(tx, { kind, commentId: row.id });
+      // As createComment does: replying means the replier has seen the
+      // Discussion Question, so their own Notifications about it are read.
+      if (row.parentId !== null) {
+        markDiscussionQuestionNotificationsRead(tx, row.userId, row.parentId);
+      }
+      tx.update(schema.notifications)
+        .set({
+          createdAt: row.createdAt,
+          readAt: row.createdAt < daysAgo(7) ? row.createdAt : null,
+        })
+        .where(
+          and(
+            eq(schema.notifications.kind, kind),
+            eq(schema.notifications.subjectId, row.id)
+          )
+        )
+        .run();
+      return row;
+    });
   }
 
   // Answered: student asks, Sarah answers, student confirms.
@@ -1993,6 +2027,12 @@ This course is still in draft while the cluster examples are rewritten against t
 
   console.log(
     `Created ${countRows(schema.comments)} lesson comments across ${countRows(schema.comments, isNull(schema.comments.parentId))} threads.`
+  );
+
+  // ─── Notifications ───
+  // Created alongside each Comment above, by comment().
+  console.log(
+    `Created ${countRows(schema.notifications)} notifications (${countRows(schema.notifications, isNull(schema.notifications.readAt))} unread).`
   );
 
   // ─── Lesson Progress ───
@@ -2828,18 +2868,38 @@ This course is still in draft while the cluster examples are rewritten against t
   db.insert(schema.enrollments)
     .values({ userId: maya.id, courseId: course1.id, enrolledAt: daysAgo(2) })
     .run();
-  db.insert(schema.refundRequests)
-    .values({
-      purchaseId: mayasPurchase.id,
-      status: RefundRequestStatus.Declined,
-      reason: "Changed my mind.",
-      declineReason:
-        "Tell us what isn't working for you and we'll take another look.",
-      requestedAt: daysAgo(1),
-      resolvedAt: daysAgo(1),
-      resolvedByUserId: admin.id,
-    })
-    .run();
+  // The decision notifies Maya through createNotifications, as a real one
+  // does (ADR 0013), backdated to when it was made and left unread.
+  const mayasDecisionAt = daysAgo(1);
+  db.transaction((tx) => {
+    const declined = tx
+      .insert(schema.refundRequests)
+      .values({
+        purchaseId: mayasPurchase.id,
+        status: RefundRequestStatus.Declined,
+        reason: "Changed my mind.",
+        declineReason:
+          "Tell us what isn't working for you and we'll take another look.",
+        requestedAt: daysAgo(1),
+        resolvedAt: mayasDecisionAt,
+        resolvedByUserId: admin.id,
+      })
+      .returning()
+      .get();
+    createNotifications(tx, {
+      kind: NotificationKind.RefundDecision,
+      refundRequestId: declined.id,
+    });
+    tx.update(schema.notifications)
+      .set({ createdAt: mayasDecisionAt })
+      .where(
+        and(
+          eq(schema.notifications.kind, NotificationKind.RefundDecision),
+          eq(schema.notifications.subjectId, declined.id)
+        )
+      )
+      .run();
+  });
 
   // ─── Flush watch events ───
   // Batched: the heartbeat makes these by far the largest table, and one
@@ -2883,6 +2943,7 @@ This course is still in draft while the cluster examples are rewritten against t
   console.log(`  Enrollments: ${countRows(schema.enrollments)}`);
   console.log(`  Course ratings: ${countRows(schema.courseRatings)}`);
   console.log(`  Lesson comments: ${countRows(schema.comments)}`);
+  console.log(`  Notifications: ${countRows(schema.notifications)}`);
   console.log(
     `  Lesson progress: ${countRows(schema.lessonProgress)} (${countRows(schema.lessonProgress, eq(schema.lessonProgress.status, LessonProgressStatus.Completed))} completed)`
   );

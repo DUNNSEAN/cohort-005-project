@@ -43,6 +43,17 @@ export enum TeamMemberRole {
   Member = "member",
 }
 
+// What a Notification is about. The kind decides which table `subjectId`
+// points into: a Comment for the discussion kinds, a Refund Request, an
+// Enrollment or a course rating for the others.
+export enum NotificationKind {
+  DiscussionReply = "discussion_reply",
+  DiscussionQuestion = "discussion_question",
+  RefundDecision = "refund_decision",
+  Enrollment = "enrollment",
+  FirstRating = "first_rating",
+}
+
 // ─── Tables ───
 
 export const users = sqliteTable("users", {
@@ -380,3 +391,29 @@ export const videoWatchEvents = sqliteTable("video_watch_events", {
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
+
+// One row per recipient per event (ADR 0013). No display text is copied in:
+// the Notification Feed builds each item at read time by joining to the
+// subject, so it always reflects the subject's current state.
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    recipientId: integer("recipient_id")
+      .notNull()
+      .references(() => users.id),
+    kind: text("kind").notNull().$type<NotificationKind>(),
+    // Polymorphic: which table it points into depends on `kind`, so there is
+    // no foreign key.
+    subjectId: integer("subject_id").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    // Null while unread.
+    readAt: text("read_at"),
+  },
+  (table) => [
+    index("notifications_recipient_idx").on(table.recipientId, table.readAt),
+    index("notifications_subject_idx").on(table.kind, table.subjectId),
+  ]
+);

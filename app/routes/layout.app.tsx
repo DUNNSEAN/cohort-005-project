@@ -2,6 +2,11 @@ import { Outlet } from "react-router";
 import type { Route } from "./+types/layout.app";
 import { Sidebar } from "~/components/sidebar";
 import { DevUI } from "~/components/dev-ui";
+import { NotificationBell } from "~/components/notification-bell";
+import {
+  countUnreadNotifications,
+  listNotifications,
+} from "~/lib/notifications.server";
 import { Toaster } from "sonner";
 import { getCurrentUserId, getDevCountry } from "~/lib/session";
 import { getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
@@ -213,6 +218,14 @@ export async function loader({ request }: Route.LoaderArgs) {
     countryTierInfo,
     countries: COUNTRIES,
     isTeamAdmin: currentUserId ? isTeamAdmin(currentUserId) : false,
+    // Loaded here so the badge refreshes on every navigation and action.
+    notifications: currentUser
+      ? {
+          unreadCount: countUnreadNotifications(db, currentUser.id),
+          items: listNotifications(db, currentUser.id),
+          role: currentUser.role,
+        }
+      : null,
   };
 }
 
@@ -225,6 +238,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
     countryTierInfo,
     countries,
     isTeamAdmin: userIsTeamAdmin,
+    notifications,
   } = loaderData;
 
   return (
@@ -233,6 +247,7 @@ export default function AppLayout({ loaderData }: Route.ComponentProps) {
         currentUser={currentUser}
         recentCourses={recentCourses}
         isTeamAdmin={userIsTeamAdmin}
+        headerSlot={notifications && <NotificationBell {...notifications} />}
       />
       <main className="flex-1 overflow-y-auto">
         <Outlet />

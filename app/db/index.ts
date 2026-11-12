@@ -48,6 +48,15 @@ function getDb() {
   return instance;
 }
 
+/** The app's Drizzle database. */
+export type Db = ReturnType<typeof getDb>;
+
+/** A Drizzle transaction, as handed to the callback of `db.transaction`. */
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** Anything that can run a query: the database itself or a transaction. */
+export type Queryable = Db | Tx;
+
 export const db = /* @__PURE__ */ new Proxy({} as ReturnType<typeof getDb>, {
   get(_target, prop) {
     const target = getDb();

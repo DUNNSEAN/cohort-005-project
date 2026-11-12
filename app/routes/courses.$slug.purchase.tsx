@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import type { Route } from "./+types/courses.$slug.purchase";
 import { getCurrentUserId } from "~/lib/session";
-import { db } from "~/db";
+import { db, type Queryable } from "~/db";
 import {
   courses,
   categories,
@@ -38,6 +38,7 @@ import { formatDuration, formatPrice } from "~/lib/utils";
 import { resolveCountry } from "~/lib/country.server";
 import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
+import { enrollStudent } from "~/lib/enrollments.server";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -142,42 +143,8 @@ function getEnrollmentCountForCourse(courseId: number) {
   return result?.count ?? 0;
 }
 
-function enrollUser(
-  userId: number,
-  courseId: number,
-  sendEmail: boolean,
-  skipValidation: boolean
-) {
-  if (!skipValidation) {
-    const existing = findEnrollment(userId, courseId);
-    if (existing) {
-      throw new Error("User is already enrolled in this course");
-    }
-
-    const course = db
-      .select()
-      .from(courses)
-      .where(eq(courses.id, courseId))
-      .get();
-    if (!course) {
-      throw new Error("Course not found");
-    }
-  }
-
-  const enrollment = db
-    .insert(enrollments)
-    .values({ userId, courseId })
-    .returning()
-    .get();
-
-  if (sendEmail) {
-    // Would send welcome email here
-  }
-
-  return enrollment;
-}
-
 function createPurchase(
+  db: Queryable,
   userId: number,
   courseId: number,
   amountPaid: number,
@@ -249,7 +216,7 @@ function createTeamPurchase(
   country: string | null,
   quantity: number
 ) {
-  const purchase = createPurchase(userId, courseId, amountPaid, country);
+  const purchase = createPurchase(db, userId, courseId, amountPaid, country);
   const team = getOrCreateTeamForUser(userId);
   const teamCoupons = generateCoupons(team.id, courseId, purchase.id, quantity);
   return { purchase, team, coupons: teamCoupons };
@@ -367,8 +334,10 @@ export async function action({ params, request }: Route.ActionArgs) {
     if (isUserEnrolled(currentUserId, course.id)) {
       throw redirect(`/courses/${slug}`);
     }
-    createPurchase(currentUserId, course.id, pppPrice, country);
-    enrollUser(currentUserId, course.id, false, false);
+    db.transaction((tx) => {
+      createPurchase(tx, currentUserId, course.id, pppPrice, country);
+      enrollStudent(tx, currentUserId, course.id);
+    });
     throw redirect(`/courses/${slug}/welcome`);
   }
 

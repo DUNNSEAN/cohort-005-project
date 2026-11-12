@@ -13,6 +13,7 @@ import { data } from "react-router";
 import { db } from "~/db";
 import { purchases, coupons, courses, enrollments } from "~/db/schema";
 import { eq, and } from "drizzle-orm";
+import { claimSeat } from "~/lib/enrollments.server";
 import { getSeatFreeze, type SeatFreeze } from "~/lib/refund-decisions.server";
 
 // A Team Licence's Unclaimed Seats freeze while it has an Open Refund
@@ -95,19 +96,7 @@ function redeemCoupon(
     };
   }
 
-  db.update(coupons)
-    .set({
-      redeemedByUserId: userId,
-      redeemedAt: new Date().toISOString(),
-    })
-    .where(eq(coupons.id, coupon.id))
-    .run();
-
-  const enrollment = db
-    .insert(enrollments)
-    .values({ userId, courseId: coupon.courseId })
-    .returning()
-    .get();
+  const enrollment = db.transaction((tx) => claimSeat(tx, coupon.id, userId));
 
   return { ok: true, enrollment };
 }
