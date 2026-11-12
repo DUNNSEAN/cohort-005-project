@@ -12,7 +12,8 @@ export const REFUND_COMPLETION_LIMIT = 0.5;
 export type RefundEligibilityFacts = {
   purchasedAt: string;
   now: Date;
-  hasRefundRequest: boolean;
+  /** The newest Refund Request on this Purchase, if any. */
+  latestRefundRequestStatus: RefundRequestStatus | null;
   isClaimedTeamSeat: boolean;
   secondsWatched: number;
   completedLessonCount: number;
@@ -20,7 +21,8 @@ export type RefundEligibilityFacts = {
 };
 
 export type RefundIneligibleReason =
-  | "already-requested"
+  | "request-open"
+  | "already-refunded"
   | "claimed-team-seat"
   | "window-closed"
   | "watched-too-much"
@@ -48,8 +50,14 @@ export function lastDayOfRefundWindow(purchasedAt: string): string {
 export function checkRefundEligibility(
   facts: RefundEligibilityFacts
 ): RefundEligibility {
-  if (facts.hasRefundRequest) {
-    return { eligible: false, reason: "already-requested" };
+  // A Purchase can have several Refund Requests over time, but only one Open
+  // at once. A Declined one may be raised again; an Approved one is final.
+  if (facts.latestRefundRequestStatus === RefundRequestStatus.Open) {
+    return { eligible: false, reason: "request-open" };
+  }
+
+  if (facts.latestRefundRequestStatus === RefundRequestStatus.Approved) {
+    return { eligible: false, reason: "already-refunded" };
   }
 
   if (facts.isClaimedTeamSeat) {
@@ -78,8 +86,9 @@ export function checkRefundEligibility(
 /** What the learner is told when the server turns a Refund Request away. */
 export const REFUND_INELIGIBLE_MESSAGES: Record<RefundIneligibleReason, string> =
   {
-    "already-requested":
-      "You have already made a Refund Request for this purchase.",
+    "request-open":
+      "You already have an Open Refund Request for this purchase.",
+    "already-refunded": "This purchase has already been refunded.",
     "claimed-team-seat":
       "A claimed team seat belongs to the team, so you cannot request a refund for it.",
     "window-closed": `The ${REFUND_WINDOW_DAYS}-day Refund Window has closed.`,
@@ -92,7 +101,7 @@ export const REFUND_INELIGIBLE_MESSAGES: Record<RefundIneligibleReason, string> 
 /** The status a learner sees on one of their Refund Requests. */
 export const REFUND_REQUEST_STATUS_LABELS: Record<RefundRequestStatus, string> =
   {
-    [RefundRequestStatus.Requested]: "Awaiting review",
+    [RefundRequestStatus.Open]: "Open",
     [RefundRequestStatus.Approved]: "Approved",
     [RefundRequestStatus.Declined]: "Declined",
   };
@@ -102,7 +111,7 @@ export const REFUND_REQUEST_COURSE_PAGE_LINES: Record<
   RefundRequestStatus,
   string
 > = {
-  [RefundRequestStatus.Requested]: "Refund Request awaiting review",
+  [RefundRequestStatus.Open]: "Refund Request open — a Platform Admin will decide it",
   [RefundRequestStatus.Declined]: "Refund Request declined",
   [RefundRequestStatus.Approved]: "Refund approved — access ends",
 };

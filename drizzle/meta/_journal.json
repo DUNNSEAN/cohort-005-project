@@ -78,6 +78,13 @@
       "when": 1794259253328,
       "tag": "0010_rename_refunds_to_refund_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794492253432,
+      "tag": "0011_refund_requests_can_be_raised_again",
+      "breakpoints": true
     }
   ]
 }

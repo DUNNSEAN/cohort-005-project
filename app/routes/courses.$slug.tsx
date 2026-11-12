@@ -362,25 +362,32 @@ function rateCourse(userId: number, courseId: number, rating: number) {
 }
 
 /**
- * What the course page shows about getting the money back: the "Request a
- * refund" offer, the status of an existing Refund Request, or nothing.
+ * What the course page shows about getting the money back: the outcome of the
+ * newest Refund Request, the "Request a refund" offer (again, after a
+ * Decline), both, or nothing.
  */
 function getRefundPanel(userId: number, courseId: number): RefundPanel | null {
   const standing = getRefundStanding(userId, courseId);
   if (!standing) return null;
 
-  if (standing.refundRequest) {
-    return { kind: "status", status: standing.refundRequest.status };
-  }
+  const latest = standing.refundRequest
+    ? {
+        status: standing.refundRequest.status,
+        declineReason: standing.refundRequest.declineReason,
+      }
+    : null;
+  const offer = standing.eligibility.eligible
+    ? { amountPaid: standing.purchase.amountPaid }
+    : null;
 
-  if (!standing.eligibility.eligible) return null;
-
-  return { kind: "offer", amountPaid: standing.purchase.amountPaid };
+  if (!latest && !offer) return null;
+  return { latest, offer };
 }
 
-type RefundPanel =
-  | { kind: "offer"; amountPaid: number }
-  | { kind: "status"; status: RefundRequestStatus };
+type RefundPanel = {
+  latest: { status: RefundRequestStatus; declineReason: string | null } | null;
+  offer: { amountPaid: number } | null;
+};
 
 const ratingSchema = z.object({
   rating: z.coerce.number().int().min(MIN_RATING).max(MAX_RATING),
@@ -418,10 +425,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 
   if (currentUserId) {
     enrolled = isUserEnrolled(currentUserId, course.id);
+    // Not only while enrolled: an Approved Refund Request ends the Enrollment,
+    // and the buyer still sees the outcome here.
+    refundPanel = getRefundPanel(currentUserId, course.id);
 
     if (enrolled) {
-      refundPanel = getRefundPanel(currentUserId, course.id);
-
       progress = calculateProgress(currentUserId, course.id, false);
 
       const progressRecords = getLessonProgressForCourse(
@@ -801,18 +809,23 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
                     </Button>
                   </Link>
                   <RateCourse userRating={userRating} />
-                  {refundPanel?.kind === "offer" && (
+                  {refundPanel?.latest && (
+                    <RefundRequestStatusLine {...refundPanel.latest} />
+                  )}
+                  {refundPanel?.offer && (
                     <RequestRefund
                       slug={course.slug}
-                      amountPaid={refundPanel.amountPaid}
+                      amountPaid={refundPanel.offer.amountPaid}
                     />
-                  )}
-                  {refundPanel?.kind === "status" && (
-                    <RefundRequestStatusLine status={refundPanel.status} />
                   )}
                 </>
               ) : (
-                enrollButton
+                <>
+                  {enrollButton}
+                  {refundPanel?.latest && (
+                    <RefundRequestStatusLine {...refundPanel.latest} />
+                  )}
+                </>
               )}
               <div className="space-y-2 pt-2 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
@@ -881,10 +894,19 @@ function RateCourse({ userRating }: { userRating: number | null }) {
   );
 }
 
-function RefundRequestStatusLine({ status }: { status: RefundRequestStatus }) {
+function RefundRequestStatusLine({
+  status,
+  declineReason,
+}: {
+  status: RefundRequestStatus;
+  declineReason: string | null;
+}) {
   return (
     <div className="border-t pt-4 text-sm">
       <p className="font-medium">{REFUND_REQUEST_COURSE_PAGE_LINES[status]}</p>
+      {declineReason && (
+        <p className="mt-1 text-muted-foreground">{declineReason}</p>
+      )}
       <Link
         to="/settings"
         className="text-xs text-muted-foreground hover:underline"

@@ -2716,7 +2716,9 @@ This course is still in draft while the cluster examples are rewritten against t
   );
 
   // Four seats on Design Systems, bought during launch week, none redeemed yet.
-  createTeamPurchase(
+  // Marta has raised a Refund Request on it, so its Seats are frozen until a
+  // Platform Admin decides, and with no Claimed Seat it can be approved.
+  const martasTeamLicence = createTeamPurchase(
     "marta.novak@student.dev",
     course3,
     4,
@@ -2725,10 +2727,20 @@ This course is still in draft while the cluster examples are rewritten against t
     []
   );
 
+  db.insert(schema.refundRequests)
+    .values({
+      purchaseId: martasTeamLicence.purchase.id,
+      status: RefundRequestStatus.Open,
+      reason:
+        "We bought the wrong course for the team. We meant to buy the TypeScript one.",
+      requestedAt: daysAgo(2),
+    })
+    .run();
+
   // ─── Liam's Refund Request ───
   // One learner part-way through a recent Purchase who has raised a Refund
-  // Request that is still awaiting review, so settings and the course page show
-  // its status. The dates count back from today, so the Purchase is always
+  // Request that is still Open, so /admin/refunds lists it and settings and
+  // the course page show its status. The dates count back from today, so the Purchase is always
   // inside its Refund Window whenever you seed.
 
   const liam = studentByEmail("liam@example.com");
@@ -2746,7 +2758,7 @@ This course is still in draft while the cluster examples are rewritten against t
   db.insert(schema.refundRequests)
     .values({
       purchaseId: liamsPurchase.id,
-      status: RefundRequestStatus.Requested,
+      status: RefundRequestStatus.Open,
       reason:
         "The pace is too fast for me and I would rather start with something gentler.",
       requestedAt: daysAgo(1),
@@ -2786,9 +2798,10 @@ This course is still in draft while the cluster examples are rewritten against t
     .run();
 
   // ─── Maya's Purchase ───
-  // A learner who bought course 1 two days ago and has not started it. Her
-  // Purchase is eligible for a Refund Request, so the course page offers
-  // "Request a refund" whenever you seed.
+  // A learner who bought course 1 two days ago and has not started it. A
+  // Platform Admin declined her first Refund Request, and a Decline is not
+  // final: the course page shows the reason and still offers "Request a
+  // refund" whenever you seed.
 
   const maya = db
     .insert(schema.users)
@@ -2801,7 +2814,8 @@ This course is still in draft while the cluster examples are rewritten against t
     })
     .returning()
     .get();
-  db.insert(schema.purchases)
+  const mayasPurchase = db
+    .insert(schema.purchases)
     .values({
       userId: maya.id,
       courseId: course1.id,
@@ -2809,9 +2823,22 @@ This course is still in draft while the cluster examples are rewritten against t
       country: null,
       createdAt: daysAgo(2),
     })
-    .run();
+    .returning()
+    .get();
   db.insert(schema.enrollments)
     .values({ userId: maya.id, courseId: course1.id, enrolledAt: daysAgo(2) })
+    .run();
+  db.insert(schema.refundRequests)
+    .values({
+      purchaseId: mayasPurchase.id,
+      status: RefundRequestStatus.Declined,
+      reason: "Changed my mind.",
+      declineReason:
+        "Tell us what isn't working for you and we'll take another look.",
+      requestedAt: daysAgo(1),
+      resolvedAt: daysAgo(1),
+      resolvedByUserId: admin.id,
+    })
     .run();
 
   // ─── Flush watch events ───
@@ -2866,7 +2893,7 @@ This course is still in draft while the cluster examples are rewritten against t
     `  Purchases: ${countRows(schema.purchases)} (${countRows(schema.purchases, gte(schema.purchases.createdAt, sevenDaysAgo))} in the last 7 days), spanning ${historyDays} days`
   );
   console.log(
-    `  Refund Requests: ${countRows(schema.refundRequests)} (${countRows(schema.refundRequests, eq(schema.refundRequests.status, RefundRequestStatus.Requested))} awaiting review)`
+    `  Refund Requests: ${countRows(schema.refundRequests)} (${countRows(schema.refundRequests, eq(schema.refundRequests.status, RefundRequestStatus.Open))} Open)`
   );
   console.log(
     `  Teams: ${countRows(schema.teams)}, coupons: ${countRows(schema.coupons)} (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed)`

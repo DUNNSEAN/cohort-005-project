@@ -31,7 +31,7 @@ const settingsSchema = z.object({
 });
 
 const REFUND_REQUEST_STATUS_STYLES: Record<RefundRequestStatus, string> = {
-  [RefundRequestStatus.Requested]:
+  [RefundRequestStatus.Open]:
     "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   [RefundRequestStatus.Approved]:
     "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
@@ -75,13 +75,15 @@ export async function loader({ request }: Route.LoaderArgs) {
       courseSlug: courses.slug,
       amountPaid: purchases.amountPaid,
       reason: refundRequests.reason,
+      declineReason: refundRequests.declineReason,
+      amountRefunded: refundRequests.amountRefunded,
       requestedAt: refundRequests.requestedAt,
     })
     .from(refundRequests)
     .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
     .where(eq(purchases.userId, currentUserId))
-    .orderBy(desc(refundRequests.requestedAt))
+    .orderBy(desc(refundRequests.requestedAt), desc(refundRequests.id))
     .all();
 
   return {
@@ -247,6 +249,18 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   {new Date(refundRequest.requestedAt).toLocaleDateString()}
                 </p>
                 <p className="mt-2 text-sm">{refundRequest.reason}</p>
+                {refundRequest.declineReason && (
+                  <p className="mt-2 text-sm">
+                    <span className="font-medium">Why it was declined: </span>
+                    {refundRequest.declineReason}
+                  </p>
+                )}
+                {refundRequest.amountRefunded !== null && (
+                  <p className="mt-2 text-sm">
+                    A Refund of {formatPrice(refundRequest.amountRefunded)},
+                    the full amount you paid, is on its way.
+                  </p>
+                )}
               </div>
             ))}
           </CardContent>

@@ -89,7 +89,10 @@ export async function action({ params, request }: Route.ActionArgs) {
 
   if (!standing.eligibility.eligible) {
     const status =
-      standing.eligibility.reason === "already-requested" ? 409 : 403;
+      standing.eligibility.reason === "request-open" ||
+      standing.eligibility.reason === "already-refunded"
+        ? 409
+        : 403;
     throw data(REFUND_INELIGIBLE_MESSAGES[standing.eligibility.reason], {
       status,
     });
@@ -105,7 +108,7 @@ export async function action({ params, request }: Route.ActionArgs) {
   db.insert(refundRequests)
     .values({
       purchaseId: standing.purchase.id,
-      status: RefundRequestStatus.Requested,
+      status: RefundRequestStatus.Open,
       reason: parsed.data.reason,
     })
     .run();

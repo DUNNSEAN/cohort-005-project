@@ -6,6 +6,7 @@ import {
   lastDayOfRefundWindow,
   type RefundEligibilityFacts,
 } from "./refund-requests";
+import { RefundRequestStatus } from "~/db/schema";
 
 // Bought late in the evening, local time, so the calendar-day rule matters.
 const PURCHASED_AT = new Date(2026, 0, 1, 23, 0).toISOString();
@@ -14,7 +15,7 @@ function facts(overrides: Partial<RefundEligibilityFacts> = {}) {
   return {
     purchasedAt: PURCHASED_AT,
     now: new Date(2026, 0, 5, 12, 0),
-    hasRefundRequest: false,
+    latestRefundRequestStatus: null,
     isClaimedTeamSeat: false,
     secondsWatched: 0,
     completedLessonCount: 0,
@@ -50,10 +51,29 @@ describe("checkRefundEligibility", () => {
     });
   });
 
-  it("allows only one Refund Request per Purchase, so a Decline is final", () => {
-    expect(checkRefundEligibility(facts({ hasRefundRequest: true }))).toEqual({
-      eligible: false,
-      reason: "already-requested",
+  describe("earlier Refund Requests on the Purchase", () => {
+    it("refuses a second while one is Open", () => {
+      expect(
+        checkRefundEligibility(
+          facts({ latestRefundRequestStatus: RefundRequestStatus.Open })
+        )
+      ).toEqual({ eligible: false, reason: "request-open" });
+    });
+
+    it("allows a new one after a Decline, so a Decline is not final", () => {
+      expect(
+        checkRefundEligibility(
+          facts({ latestRefundRequestStatus: RefundRequestStatus.Declined })
+        ).eligible
+      ).toBe(true);
+    });
+
+    it("refuses one once a Refund Request has been approved", () => {
+      expect(
+        checkRefundEligibility(
+          facts({ latestRefundRequestStatus: RefundRequestStatus.Approved })
+        )
+      ).toEqual({ eligible: false, reason: "already-refunded" });
     });
   });
 
