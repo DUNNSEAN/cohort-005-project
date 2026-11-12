@@ -33,7 +33,7 @@ describe("first_rating", () => {
       expect.objectContaining({
         kind: schema.NotificationKind.FirstRating,
         actorName: "Test User",
-        action: "gave your course its first rating — ★★★★☆",
+        action: "rated your course ★★★★☆",
         quote: null,
         courseTitle: "Test Course",
         lessonTitle: null,
@@ -42,6 +42,35 @@ describe("first_rating", () => {
       }),
     ]);
     expect(countUnreadNotifications(testDb, base.instructor.id)).toBe(1);
+  });
+
+  it("words a later Student's first rating the same way, not as the course's first", () => {
+    rate(base.user.id, 4);
+    const [second] = testDb
+      .insert(schema.users)
+      .values({
+        name: "Priya Shah",
+        email: "priya@example.com",
+        role: schema.UserRole.Student,
+      })
+      .returning()
+      .all();
+    testDb
+      .insert(schema.enrollments)
+      .values({ userId: second.id, courseId: base.course.id })
+      .run();
+
+    rate(second.id, 2);
+
+    expect(
+      listNotifications(testDb, base.instructor.id).map((item) => [
+        item.actorName,
+        item.action,
+      ])
+    ).toEqual([
+      ["Priya Shah", "rated your course ★★☆☆☆"],
+      ["Test User", "rated your course ★★★★☆"],
+    ]);
   });
 
   it("notifies nobody when the Student changes their rating", () => {

@@ -530,7 +530,7 @@ function firstRatingFeedContent(
       rating.id,
       {
         actorName: rating.actorName,
-        action: `gave your course its first rating — ${stars(rating.rating)}`,
+        action: `rated your course ${stars(rating.rating)}`,
         quote: null,
         courseTitle: rating.courseTitle,
         lessonTitle: null,
