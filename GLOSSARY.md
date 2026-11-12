@@ -74,6 +74,10 @@ A Seat a Student has claimed. It belongs to that Student, so a Team Licence with
 The buyer's ask, with their reason, to get back what they paid for one specific Purchase. A Platform Admin approves or declines it. One Purchase can have several Refund Requests over time, but only one can be undecided at once.
 _Avoid_: Refund (for the ask itself), Cancellation, Reversal, Chargeback
 
+**Refund Window**:
+The 14 calendar days after the day of a Purchase, including the whole fourteenth day. A Refund Request can only be raised inside it.
+_Avoid_: Cancel window, Cancellation period
+
 **Open Refund Request**:
 A Refund Request no Platform Admin has decided yet. The buyer keeps their Enrollment while it is open, and a Team Licence's Unclaimed Seats can't be claimed.
 _Avoid_: Pending, Requested, Awaiting review
