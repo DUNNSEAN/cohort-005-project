@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "009cadec-70d6-4c3a-bd5f-7ed79852b748",
+  "id": "7ddeb4a1-8895-4c2d-9020-e6bf48d919a9",
   "prevId": "c9d21c71-b440-49a7-997b-a837eac0accd",
   "tables": {
     "categories": {
@@ -831,89 +831,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "notifications": {
-      "name": "notifications",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "recipient_id": {
-          "name": "recipient_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "subject_id": {
-          "name": "subject_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "read_at": {
-          "name": "read_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "notifications_recipient_idx": {
-          "name": "notifications_recipient_idx",
-          "columns": [
-            "recipient_id",
-            "read_at"
-          ],
-          "isUnique": false
-        },
-        "notifications_subject_idx": {
-          "name": "notifications_subject_idx",
-          "columns": [
-            "kind",
-            "subject_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "notifications_recipient_id_users_id_fk": {
-          "name": "notifications_recipient_id_users_id_fk",
-          "tableFrom": "notifications",
-          "tableTo": "users",
-          "columnsFrom": [
-            "recipient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "purchases": {
       "name": "purchases",
       "columns": {
@@ -1321,8 +1238,8 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "refunds": {
-      "name": "refunds",
+    "refund_requests": {
+      "name": "refund_requests",
       "columns": {
         "id": {
           "name": "id",
@@ -1383,18 +1300,18 @@
         }
       },
       "indexes": {
-        "refunds_purchase_idx": {
-          "name": "refunds_purchase_idx",
+        "refund_requests_purchase_unique": {
+          "name": "refund_requests_purchase_unique",
           "columns": [
             "purchase_id"
           ],
-          "isUnique": false
+          "isUnique": true
         }
       },
       "foreignKeys": {
-        "refunds_purchase_id_purchases_id_fk": {
-          "name": "refunds_purchase_id_purchases_id_fk",
-          "tableFrom": "refunds",
+        "refund_requests_purchase_id_purchases_id_fk": {
+          "name": "refund_requests_purchase_id_purchases_id_fk",
+          "tableFrom": "refund_requests",
           "tableTo": "purchases",
           "columnsFrom": [
             "purchase_id"
@@ -1405,9 +1322,9 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "refunds_resolved_by_user_id_users_id_fk": {
-          "name": "refunds_resolved_by_user_id_users_id_fk",
-          "tableFrom": "refunds",
+        "refund_requests_resolved_by_user_id_users_id_fk": {
+          "name": "refund_requests_resolved_by_user_id_users_id_fk",
+          "tableFrom": "refund_requests",
           "tableTo": "users",
           "columnsFrom": [
             "resolved_by_user_id"
@@ -1670,7 +1587,9 @@
   "enums": {},
   "_meta": {
     "schemas": {},
-    "tables": {},
+    "tables": {
+      "\"refunds\"": "\"refund_requests\""
+    },
     "columns": {}
   },
   "internal": {

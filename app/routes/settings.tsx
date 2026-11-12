@@ -12,22 +12,32 @@ import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import {
   UserRole,
-  RefundStatus,
+  RefundRequestStatus,
   users,
   courses,
   purchases,
-  refunds,
+  refundRequests,
 } from "~/db/schema";
 import { AlertTriangle } from "lucide-react";
 import { data, isRouteErrorResponse, Link } from "react-router";
 import { db } from "~/db";
-import { and, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { formatPrice } from "~/lib/utils";
+import { REFUND_REQUEST_STATUS_LABELS } from "~/lib/refund-requests";
 
 const settingsSchema = z.object({
   name: z.string().trim().min(1, "Name cannot be empty."),
   bio: z.string().trim().optional(),
 });
+
+const REFUND_REQUEST_STATUS_STYLES: Record<RefundRequestStatus, string> = {
+  [RefundRequestStatus.Open]:
+    "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  [RefundRequestStatus.Approved]:
+    "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  [RefundRequestStatus.Declined]:
+    "bg-muted text-muted-foreground",
+};
 
 export function meta() {
   return [
@@ -55,24 +65,25 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("User not found.", { status: 404 });
   }
 
-  const pendingChargebacks = db
+  // Every Refund Request the learner has made, whatever its outcome, so a
+  // Declined one does not silently disappear.
+  const learnerRefundRequests = db
     .select({
-      id: refunds.id,
+      id: refundRequests.id,
+      status: refundRequests.status,
       courseTitle: courses.title,
       courseSlug: courses.slug,
       amountPaid: purchases.amountPaid,
-      reason: refunds.reason,
-      requestedAt: refunds.requestedAt,
+      reason: refundRequests.reason,
+      declineReason: refundRequests.declineReason,
+      amountRefunded: refundRequests.amountRefunded,
+      requestedAt: refundRequests.requestedAt,
     })
-    .from(refunds)
-    .innerJoin(purchases, eq(refunds.purchaseId, purchases.id))
+    .from(refundRequests)
+    .innerJoin(purchases, eq(refundRequests.purchaseId, purchases.id))
     .innerJoin(courses, eq(purchases.courseId, courses.id))
-    .where(
-      and(
-        eq(purchases.userId, currentUserId),
-        eq(refunds.status, RefundStatus.Requested)
-      )
-    )
+    .where(eq(purchases.userId, currentUserId))
+    .orderBy(desc(refundRequests.requestedAt), desc(refundRequests.id))
     .all();
 
   return {
@@ -83,7 +94,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       bio: currentUser.bio,
       role: currentUser.role,
     },
-    pendingChargebacks,
+    refundRequests: learnerRefundRequests,
   };
 }
 
@@ -122,7 +133,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { user, pendingChargebacks } = loaderData;
+  const { user, refundRequests } = loaderData;
   const fetcher = useFetcher();
   const nameInputRef = useRef<HTMLInputElement>(null);
 
@@ -209,35 +220,47 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
         </CardContent>
       </Card>
 
-      {pendingChargebacks.length > 0 && (
+      {refundRequests.length > 0 && (
         <Card className="mt-8 max-w-md">
           <CardHeader>
-            <h2 className="text-lg font-semibold">Pending Chargeback</h2>
+            <h2 className="text-lg font-semibold">Refund Requests</h2>
             <p className="text-sm text-muted-foreground">
-              {pendingChargebacks.length === 1
-                ? "One chargeback is waiting on us."
-                : `${pendingChargebacks.length} chargebacks are waiting on us.`}
+              Each request you have made, and where it stands.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            {pendingChargebacks.map((chargeback) => (
-              <div key={chargeback.id} className="rounded-md border p-3">
+            {refundRequests.map((refundRequest) => (
+              <div key={refundRequest.id} className="rounded-md border p-3">
                 <div className="flex items-start justify-between gap-3">
                   <Link
-                    to={`/courses/${chargeback.courseSlug}`}
+                    to={`/courses/${refundRequest.courseSlug}`}
                     className="font-medium hover:underline"
                   >
-                    {chargeback.courseTitle}
+                    {refundRequest.courseTitle}
                   </Link>
-                  <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                    Pending Chargeback
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${REFUND_REQUEST_STATUS_STYLES[refundRequest.status]}`}
+                  >
+                    {REFUND_REQUEST_STATUS_LABELS[refundRequest.status]}
                   </span>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {formatPrice(chargeback.amountPaid)} · raised{" "}
-                  {new Date(chargeback.requestedAt).toLocaleDateString()}
+                  {formatPrice(refundRequest.amountPaid)} · requested{" "}
+                  {new Date(refundRequest.requestedAt).toLocaleDateString()}
                 </p>
-                <p className="mt-2 text-sm">{chargeback.reason}</p>
+                <p className="mt-2 text-sm">{refundRequest.reason}</p>
+                {refundRequest.declineReason && (
+                  <p className="mt-2 text-sm">
+                    <span className="font-medium">Why it was declined: </span>
+                    {refundRequest.declineReason}
+                  </p>
+                )}
+                {refundRequest.amountRefunded !== null && (
+                  <p className="mt-2 text-sm">
+                    A Refund of {formatPrice(refundRequest.amountRefunded)},
+                    the full amount you paid, is on its way.
+                  </p>
+                )}
               </div>
             ))}
           </CardContent>

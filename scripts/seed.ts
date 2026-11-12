@@ -13,6 +13,7 @@ import {
   QuestionType,
   TeamMemberRole,
   NotificationKind,
+  RefundRequestStatus,
 } from "../app/db/schema";
 import {
   createNotifications,
@@ -82,7 +83,8 @@ async function seed() {
     DROP TABLE IF EXISTS coupons;
     DROP TABLE IF EXISTS team_members;
     DROP TABLE IF EXISTS teams;
-    DROP TABLE IF EXISTS refunds;
+    DROP TABLE IF EXISTS refund_requests;
+    DROP TABLE IF EXISTS refunds; -- the old name of refund_requests, in databases seeded before the rename
     DROP TABLE IF EXISTS purchases;
     DROP TABLE IF EXISTS enrollments;
     DROP TABLE IF EXISTS lessons;
@@ -2754,7 +2756,9 @@ This course is still in draft while the cluster examples are rewritten against t
   );
 
   // Four seats on Design Systems, bought during launch week, none redeemed yet.
-  createTeamPurchase(
+  // Marta has raised a Refund Request on it, so its Seats are frozen until a
+  // Platform Admin decides, and with no Claimed Seat it can be approved.
+  const martasTeamLicence = createTeamPurchase(
     "marta.novak@student.dev",
     course3,
     4,
@@ -2763,13 +2767,24 @@ This course is still in draft while the cluster examples are rewritten against t
     []
   );
 
-  // ─── Liam's Purchase ───
-  // One learner part-way through a recent purchase, with no request raised, so
-  // the course page offers "Cancel my purchase". The dates count back from
-  // today, so the fourteen-day refund window is still open whenever you seed.
+  db.insert(schema.refundRequests)
+    .values({
+      purchaseId: martasTeamLicence.purchase.id,
+      status: RefundRequestStatus.Open,
+      reason:
+        "We bought the wrong course for the team. We meant to buy the TypeScript one.",
+      requestedAt: daysAgo(2),
+    })
+    .run();
+
+  // ─── Liam's Refund Request ───
+  // One learner part-way through a recent Purchase who has raised a Refund
+  // Request that is still Open, so /admin/refunds lists it and settings and
+  // the course page show its status. The dates count back from today, so the Purchase is always
+  // inside its Refund Window whenever you seed.
 
   const liam = studentByEmail("liam@example.com");
-  db
+  const liamsPurchase = db
     .insert(schema.purchases)
     .values({
       userId: liam.id,
@@ -2777,6 +2792,16 @@ This course is still in draft while the cluster examples are rewritten against t
       amountPaid: 7900,
       country: null,
       createdAt: daysAgo(9),
+    })
+    .returning()
+    .get();
+  db.insert(schema.refundRequests)
+    .values({
+      purchaseId: liamsPurchase.id,
+      status: RefundRequestStatus.Open,
+      reason:
+        "The pace is too fast for me and I would rather start with something gentler.",
+      requestedAt: daysAgo(1),
     })
     .run();
   db.insert(schema.enrollments)
@@ -2809,6 +2834,50 @@ This course is still in draft while the cluster examples are rewritten against t
       rating: 4,
       createdAt: daysAgo(6),
       updatedAt: daysAgo(6),
+    })
+    .run();
+
+  // ─── Maya's Purchase ───
+  // A learner who bought course 1 two days ago and has not started it. A
+  // Platform Admin declined her first Refund Request, and a Decline is not
+  // final: the course page shows the reason and still offers "Request a
+  // refund" whenever you seed.
+
+  const maya = db
+    .insert(schema.users)
+    .values({
+      name: "Maya Chen",
+      email: "maya.chen@student.dev",
+      role: UserRole.Student,
+      avatarUrl: "https://api.dicebear.com/9.x/avataaars/svg?seed=maya",
+      createdAt: daysAgo(3),
+    })
+    .returning()
+    .get();
+  const mayasPurchase = db
+    .insert(schema.purchases)
+    .values({
+      userId: maya.id,
+      courseId: course1.id,
+      amountPaid: 7900,
+      country: null,
+      createdAt: daysAgo(2),
+    })
+    .returning()
+    .get();
+  db.insert(schema.enrollments)
+    .values({ userId: maya.id, courseId: course1.id, enrolledAt: daysAgo(2) })
+    .run();
+  db.insert(schema.refundRequests)
+    .values({
+      purchaseId: mayasPurchase.id,
+      status: RefundRequestStatus.Declined,
+      reason: "Changed my mind.",
+      declineReason:
+        "Tell us what isn't working for you and we'll take another look.",
+      requestedAt: daysAgo(1),
+      resolvedAt: daysAgo(1),
+      resolvedByUserId: admin.id,
     })
     .run();
 
@@ -2863,6 +2932,9 @@ This course is still in draft while the cluster examples are rewritten against t
   );
   console.log(
     `  Purchases: ${countRows(schema.purchases)} (${countRows(schema.purchases, gte(schema.purchases.createdAt, sevenDaysAgo))} in the last 7 days), spanning ${historyDays} days`
+  );
+  console.log(
+    `  Refund Requests: ${countRows(schema.refundRequests)} (${countRows(schema.refundRequests, eq(schema.refundRequests.status, RefundRequestStatus.Open))} Open)`
   );
   console.log(
     `  Teams: ${countRows(schema.teams)}, coupons: ${countRows(schema.coupons)} (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed)`
