@@ -57,4 +57,8 @@ export default [
     "api/notifications/:notificationId/read",
     "routes/api.notifications.$notificationId.read.ts"
   ),
+  route(
+    "api/notifications/unread-count",
+    "routes/api.notifications.unread-count.ts"
+  ),
 ] satisfies RouteConfig;

@@ -12,6 +12,7 @@ import {
 import { NotificationKind } from "~/db/schema";
 import { cn, formatRelativeTime } from "~/lib/utils";
 import type { NotificationItem } from "~/lib/notifications.server";
+import { useUnreadCountPolling } from "./use-unread-count-polling";
 
 export interface NotificationBellProps {
   unreadCount: number;
@@ -30,6 +31,7 @@ const kindIcons: Record<NotificationKind, LucideIcon> = {
 /** The bell in the sidebar header, with its popover Notification Feed. */
 export function NotificationBell({ unreadCount, items }: NotificationBellProps) {
   const [open, setOpen] = useState(false);
+  useUnreadCountPolling(unreadCount);
 
   return (
     <>
