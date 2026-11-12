@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { eq, gte, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -12,7 +12,12 @@ import {
   LessonProgressStatus,
   QuestionType,
   TeamMemberRole,
+  NotificationKind,
 } from "../app/db/schema";
+import {
+  createNotifications,
+  markDiscussionQuestionNotificationsRead,
+} from "../app/lib/notifications.server";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1869,9 +1874,37 @@ This course is still in draft while the cluster examples are rewritten against t
   // deleted question kept as a tombstone because it has a reply.
   // Only enrolled students comment.
 
+  // Each seeded Comment notifies people through createNotifications, the one
+  // entry point for Notifications (ADR 0013), so the seeded feeds follow the
+  // same rules as real ones. Notifications are then backdated to the Comment;
+  // those older than a week are read, newer ones stay unread for the bell.
   function comment(values: typeof schema.comments.$inferInsert) {
-    const [row] = db.insert(schema.comments).values(values).returning().all();
-    return row;
+    return db.transaction((tx) => {
+      const row = tx.insert(schema.comments).values(values).returning().get();
+      const kind =
+        row.parentId === null
+          ? NotificationKind.DiscussionQuestion
+          : NotificationKind.DiscussionReply;
+      createNotifications(tx, { kind, commentId: row.id });
+      // As createComment does: replying means the replier has seen the
+      // Discussion Question, so their own Notifications about it are read.
+      if (row.parentId !== null) {
+        markDiscussionQuestionNotificationsRead(tx, row.userId, row.parentId);
+      }
+      tx.update(schema.notifications)
+        .set({
+          createdAt: row.createdAt,
+          readAt: row.createdAt < daysAgo(7) ? row.createdAt : null,
+        })
+        .where(
+          and(
+            eq(schema.notifications.kind, kind),
+            eq(schema.notifications.subjectId, row.id)
+          )
+        )
+        .run();
+      return row;
+    });
   }
 
   // Answered: student asks, Sarah answers, student confirms.
@@ -1995,19 +2028,7 @@ This course is still in draft while the cluster examples are rewritten against t
   );
 
   // ─── Notifications ───
-  // The comments above were inserted directly, not through createComment, so
-  // give each post's author the Discussion Reply Notifications createComment
-  // would have written. Replies from the last week stay unread so the bell has
-  // something to show.
-  sqlite.exec(`
-    INSERT INTO notifications (recipient_id, kind, subject_id, created_at, read_at)
-    SELECT parent.user_id, 'discussion_reply', reply.id, reply.created_at,
-      CASE WHEN reply.created_at < '${daysAgo(7)}' THEN reply.created_at END
-    FROM comments reply
-    JOIN comments parent ON parent.id = reply.parent_id
-    WHERE reply.user_id <> parent.user_id;
-  `);
-
+  // Created alongside each Comment above, by comment().
   console.log(
     `Created ${countRows(schema.notifications)} notifications (${countRows(schema.notifications, isNull(schema.notifications.readAt))} unread).`
   );
