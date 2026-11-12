@@ -77,13 +77,14 @@ describe("discussion_reply", () => {
     expect(countUnreadNotifications(testDb, base.user.id)).toBe(1);
   });
 
-  it("notifies only the post's author, not the replier", () => {
+  it("doesn't notify the replier of their own Reply", () => {
     const question = post(base.user.id, null, "Why use generics?");
 
     post(base.instructor.id, question.id, "To keep types precise.");
 
-    expect(listNotifications(testDb, base.instructor.id)).toEqual([]);
-    expect(countUnreadNotifications(testDb, base.instructor.id)).toBe(0);
+    expect(
+      listNotifications(testDb, base.instructor.id).map((item) => item.kind)
+    ).toEqual([schema.NotificationKind.DiscussionQuestion]);
   });
 
   it("notifies the author of a Comment about Replies from other Students", () => {
@@ -122,12 +123,6 @@ describe("discussion_reply", () => {
     expect(countUnreadNotifications(testDb, base.user.id)).toBe(0);
   });
 
-  it("notifies nobody when a top-level post goes up", () => {
-    post(base.user.id, null, "Why use generics?");
-
-    expect(listNotifications(testDb, base.instructor.id)).toEqual([]);
-    expect(listNotifications(testDb, base.user.id)).toEqual([]);
-  });
 
   it("doesn't notify a Lapsed Student about Replies to their post", () => {
     const question = post(base.user.id, null, "Why use generics?");
@@ -171,6 +166,154 @@ describe("discussion_reply", () => {
     expect(listNotifications(testDb, base.user.id)[0].quote).toBe(
       "Fixed answer."
     );
+  });
+});
+
+function addAdmin(name: string) {
+  return testDb
+    .insert(schema.users)
+    .values({
+      name,
+      email: `${name.toLowerCase().replace(/\s/g, ".")}@example.com`,
+      role: schema.UserRole.Admin,
+    })
+    .returning()
+    .get();
+}
+
+describe("discussion_question", () => {
+  it("tells the Instructor a Student asked, quoting the Discussion Question", () => {
+    const question = post(base.user.id, null, "Why use generics?");
+
+    expect(listNotifications(testDb, base.instructor.id)).toEqual([
+      expect.objectContaining({
+        kind: schema.NotificationKind.DiscussionQuestion,
+        actorName: "Test User",
+        action: "asked a Discussion Question",
+        quote: "Why use generics?",
+        courseTitle: "Test Course",
+        lessonTitle: "Generics",
+        href: `/courses/test-course/lessons/${lessonId}#comment-${question.id}`,
+        read: false,
+      }),
+    ]);
+    expect(countUnreadNotifications(testDb, base.instructor.id)).toBe(1);
+  });
+
+  it("notifies nobody when the Instructor posts a top-level Comment", () => {
+    post(base.instructor.id, null, "Welcome to the lesson!");
+
+    expect(listNotifications(testDb, base.instructor.id)).toEqual([]);
+    expect(listNotifications(testDb, base.user.id)).toEqual([]);
+  });
+
+  it("notifies nobody when a Platform Admin posts a top-level Comment", () => {
+    const admin = addAdmin("Pat Admin");
+
+    post(admin.id, null, "Heads up: this lesson was updated.");
+
+    expect(listNotifications(testDb, base.instructor.id)).toEqual([]);
+  });
+});
+
+describe("discussion_reply to the Instructor", () => {
+  it("notifies the Instructor and the post's author of a Student's Reply", () => {
+    const peer = addStudent("Priya Shah");
+    enroll(peer.id);
+    const question = post(base.user.id, null, "Why use generics?");
+    const reply = post(peer.id, question.id, "So types flow through.");
+
+    expect(
+      listNotifications(testDb, base.instructor.id).filter(
+        (item) => item.kind === schema.NotificationKind.DiscussionReply
+      )
+    ).toEqual([
+      expect.objectContaining({
+        actorName: "Priya Shah",
+        action: "replied to Test User's post",
+        quote: "So types flow through.",
+        href: `/courses/test-course/lessons/${lessonId}#comment-${reply.id}`,
+      }),
+    ]);
+    expect(listNotifications(testDb, base.user.id)).toEqual([
+      expect.objectContaining({
+        actorName: "Priya Shah",
+        action: "replied to your post",
+      }),
+    ]);
+  });
+
+  it("gives the Instructor one Notification, worded for the author, when the post is theirs", () => {
+    const comment = post(base.instructor.id, null, "Try the exercise first.");
+
+    post(base.user.id, comment.id, "Done, it clicked!");
+
+    expect(listNotifications(testDb, base.instructor.id)).toEqual([
+      expect.objectContaining({
+        kind: schema.NotificationKind.DiscussionReply,
+        actorName: "Test User",
+        action: "replied to your post",
+      }),
+    ]);
+    expect(countUnreadNotifications(testDb, base.instructor.id)).toBe(1);
+  });
+
+  it("says the author replied to their own post", () => {
+    const question = post(base.user.id, null, "Why use generics?");
+
+    post(base.user.id, question.id, "Never mind, I worked it out.");
+
+    expect(
+      listNotifications(testDb, base.instructor.id).map((item) => item.action)
+    ).toEqual(["replied to their own post", "asked a Discussion Question"]);
+  });
+
+  it("doesn't notify the Instructor of their own Reply", () => {
+    const question = post(base.user.id, null, "Why use generics?");
+
+    post(base.instructor.id, question.id, "To keep types precise.");
+
+    expect(
+      listNotifications(testDb, base.instructor.id).map((item) => item.kind)
+    ).toEqual([schema.NotificationKind.DiscussionQuestion]);
+    expect(listNotifications(testDb, base.user.id)).toHaveLength(1);
+  });
+
+  it("doesn't notify the Instructor of a Platform Admin's Reply, but does notify the author", () => {
+    const admin = addAdmin("Pat Admin");
+    const question = post(base.user.id, null, "Why use generics?");
+
+    post(admin.id, question.id, "See the TypeScript handbook.");
+
+    expect(
+      listNotifications(testDb, base.instructor.id).map((item) => item.kind)
+    ).toEqual([schema.NotificationKind.DiscussionQuestion]);
+    expect(listNotifications(testDb, base.user.id)).toEqual([
+      expect.objectContaining({
+        actorName: "Pat Admin",
+        action: "replied to your post",
+      }),
+    ]);
+  });
+
+  it("doesn't notify a Lapsed Student of Replies, while the Instructor is still notified", () => {
+    const peer = addStudent("Priya Shah");
+    enroll(peer.id);
+    const question = post(base.user.id, null, "Why use generics?");
+    testDb
+      .delete(schema.enrollments)
+      .where(eq(schema.enrollments.userId, base.user.id))
+      .run();
+
+    post(peer.id, question.id, "So types flow through.");
+
+    expect(listNotifications(testDb, base.user.id)).toEqual([]);
+    expect(
+      listNotifications(testDb, base.instructor.id).map((item) => item.kind)
+    ).toEqual([
+      schema.NotificationKind.DiscussionReply,
+      schema.NotificationKind.DiscussionQuestion,
+    ]);
   });
 });
 
