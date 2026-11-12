@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import type { db } from "~/db";
-import { comments, lessons } from "~/db/schema";
+import { comments, lessons, NotificationKind } from "~/db/schema";
 import { MAX_COMMENT_LENGTH, MIN_COMMENT_LENGTH } from "~/lib/comments";
+import { createNotifications } from "~/lib/notifications.server";
 
 /** A Drizzle transaction, as handed to the callback of `db.transaction`. */
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -58,9 +59,18 @@ export function createComment(tx: Tx, input: NewComment) {
     }
   }
 
-  return tx
+  const comment = tx
     .insert(comments)
     .values({ userId, lessonId, parentId, body })
     .returning()
     .get();
+
+  if (comment.parentId !== null) {
+    createNotifications(tx, {
+      kind: NotificationKind.DiscussionReply,
+      commentId: comment.id,
+    });
+  }
+
+  return comment;
 }
