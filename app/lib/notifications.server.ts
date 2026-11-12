@@ -1,5 +1,4 @@
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
 import {
   comments,
   courseRatings,
@@ -38,8 +37,6 @@ type Audience = {
   recipientIds: number[];
 };
 
-const NOBODY = null;
-
 /**
  * The one entry point for creating Notifications (ADR 0013). Runs inside the
  * triggering event's transaction, so if it throws, the event rolls back too.
@@ -74,7 +71,7 @@ function audienceFor(tx: Tx, event: NotificationEvent): Audience | null {
     case NotificationKind.DiscussionQuestion:
       return discussionQuestionAudience(tx, event.commentId);
     case NotificationKind.RefundDecision:
-      return NOBODY;
+      return null;
     case NotificationKind.Enrollment:
       return enrollmentAudience(tx, event.enrollmentId);
     case NotificationKind.FirstRating:
@@ -151,7 +148,7 @@ export function listNotifications(
     .limit(FEED_LIMIT)
     .all();
 
-  return render(db, rows, userId);
+  return buildFeedItems(db, rows, userId);
 }
 
 /** How many Unread Notifications the person has, as the bell shows it. */
@@ -164,7 +161,7 @@ export function countUnreadNotifications(db: Queryable, userId: number) {
     )
     .all();
 
-  return render(db, rows, userId).length;
+  return buildFeedItems(db, rows, userId).length;
 }
 
 /** Marks one of the person's Notifications read. Ignores anyone else's. */
@@ -187,19 +184,19 @@ export function markNotificationRead(
 
 /**
  * Marks read the person's own Unread Notifications about one Discussion
- * Question's thread: the `discussion_question` Notification for it and any
- * `discussion_reply` Notifications on it. Called when they post a Discussion
- * Reply there; nobody else's Notifications are touched.
+ * Question: the `discussion_question` Notification for it and any
+ * `discussion_reply` Notifications on its Discussion Replies. Called when they
+ * post a Discussion Reply to it; nobody else's Notifications are touched.
  */
-export function markThreadNotificationsRead(
+export function markDiscussionQuestionNotificationsRead(
   db: Queryable,
   userId: number,
-  threadId: number
+  discussionQuestionId: number
 ) {
   const replyIds = db
     .select({ id: comments.id })
     .from(comments)
-    .where(eq(comments.parentId, threadId));
+    .where(eq(comments.parentId, discussionQuestionId));
 
   db.update(notifications)
     .set({ readAt: new Date().toISOString() })
@@ -210,7 +207,7 @@ export function markThreadNotificationsRead(
         or(
           and(
             eq(notifications.kind, NotificationKind.DiscussionQuestion),
-            eq(notifications.subjectId, threadId)
+            eq(notifications.subjectId, discussionQuestionId)
           ),
           and(
             eq(notifications.kind, NotificationKind.DiscussionReply),
@@ -235,7 +232,7 @@ export function markAllNotificationsRead(db: Queryable, userId: number) {
     .run();
 }
 
-function render(
+function buildFeedItems(
   db: Queryable,
   rows: NotificationRow[],
   viewerId: number
@@ -273,12 +270,8 @@ function render(
  * course's Instructor and Platform Admins) are never Lapsed.
  */
 function isLapsed(db: Queryable, userId: number, courseId: number) {
-  const user = db
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId))
-    .get();
-  if (!user || user.role === UserRole.Admin) return false;
+  const role = userRole(db, userId);
+  if (!role || role === UserRole.Admin) return false;
 
   const course = db
     .select({ instructorId: courses.instructorId })
@@ -297,6 +290,49 @@ function isLapsed(db: Queryable, userId: number, courseId: number) {
   return !enrollment;
 }
 
+function userRole(db: Queryable, userId: number) {
+  return db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .get()?.role;
+}
+
+/**
+ * Comments with their author and the lesson and course they were posted on.
+ * The one place the comments → lessons → modules → courses join lives.
+ * Includes soft-deleted Comments; callers that render filter them out.
+ */
+function commentsWithContext(db: Queryable, commentIds: number[]) {
+  return db
+    .select({
+      id: comments.id,
+      body: comments.body,
+      parentId: comments.parentId,
+      deletedAt: comments.deletedAt,
+      authorId: comments.userId,
+      authorName: users.name,
+      lessonId: lessons.id,
+      lessonTitle: lessons.title,
+      courseId: courses.id,
+      courseTitle: courses.title,
+      courseSlug: courses.slug,
+      instructorId: courses.instructorId,
+    })
+    .from(comments)
+    .innerJoin(users, eq(comments.userId, users.id))
+    .innerJoin(lessons, eq(comments.lessonId, lessons.id))
+    .innerJoin(modules, eq(lessons.moduleId, modules.id))
+    .innerJoin(courses, eq(modules.courseId, courses.id))
+    .where(inArray(comments.id, commentIds))
+    .all();
+}
+
+/** The course a Comment was posted on, with its Instructor. */
+function courseForComment(db: Queryable, commentId: number) {
+  return commentsWithContext(db, [commentId]).at(0);
+}
+
 function lessonHref(courseSlug: string, lessonId: number, commentId: number) {
   return `/courses/${courseSlug}/lessons/${lessonId}#comment-${commentId}`;
 }
@@ -309,7 +345,7 @@ function discussionReplyAudience(tx: Tx, replyId: number): Audience | null {
     .from(comments)
     .where(eq(comments.id, replyId))
     .get();
-  if (!reply || reply.parentId === null) return NOBODY;
+  if (!reply || reply.parentId === null) return null;
 
   const post = tx
     .select({ userId: comments.userId })
@@ -317,7 +353,7 @@ function discussionReplyAudience(tx: Tx, replyId: number): Audience | null {
     .where(eq(comments.id, reply.parentId))
     .get();
   const course = courseForComment(tx, reply.id);
-  if (!post || !course) return NOBODY;
+  if (!post || !course) return null;
 
   // A Platform Admin's answer is moderation, not work for the Instructor.
   const instructorIds = isPlatformAdmin(tx, reply.userId)
@@ -342,73 +378,61 @@ function replyAction(
   return `replied to ${reply.postAuthorName}'s post`;
 }
 
-const posts = alias(comments, "posts");
-const postAuthors = alias(users, "post_authors");
-
 function discussionReplyFeedContent(
   db: Queryable,
   replyIds: number[],
   viewerId: number
 ): Map<number, FeedItemContent> {
-  const replies = db
-    .select({
-      id: comments.id,
-      body: comments.body,
-      actorId: comments.userId,
-      actorName: users.name,
-      postAuthorId: postAuthors.id,
-      postAuthorName: postAuthors.name,
-      lessonId: lessons.id,
-      lessonTitle: lessons.title,
-      courseTitle: courses.title,
-      courseSlug: courses.slug,
-    })
-    .from(comments)
-    .innerJoin(users, eq(comments.userId, users.id))
-    .innerJoin(posts, eq(comments.parentId, posts.id))
-    .innerJoin(postAuthors, eq(posts.userId, postAuthors.id))
-    .innerJoin(lessons, eq(comments.lessonId, lessons.id))
-    .innerJoin(modules, eq(lessons.moduleId, modules.id))
-    .innerJoin(courses, eq(modules.courseId, courses.id))
-    .where(and(inArray(comments.id, replyIds), isNull(comments.deletedAt)))
-    .all();
+  const replies = commentsWithContext(db, replyIds).filter(
+    (reply) => reply.deletedAt === null
+  );
+  const postIds = replies.flatMap((reply) =>
+    reply.parentId === null ? [] : [reply.parentId]
+  );
+  const postAuthors = new Map(
+    db
+      .select({ id: comments.id, authorId: users.id, authorName: users.name })
+      .from(comments)
+      .innerJoin(users, eq(comments.userId, users.id))
+      .where(inArray(comments.id, postIds))
+      .all()
+      .map((post) => [post.id, post])
+  );
 
   return new Map(
-    replies.map((reply) => [
-      reply.id,
-      {
-        actorName: reply.actorName,
-        action: replyAction(reply, viewerId),
-        quote: reply.body,
-        courseTitle: reply.courseTitle,
-        lessonTitle: reply.lessonTitle,
-        href: lessonHref(reply.courseSlug, reply.lessonId, reply.id),
-      },
-    ])
+    replies.flatMap((reply) => {
+      const post =
+        reply.parentId === null ? undefined : postAuthors.get(reply.parentId);
+      if (!post) return [];
+      const action = replyAction(
+        {
+          actorId: reply.authorId,
+          postAuthorId: post.authorId,
+          postAuthorName: post.authorName,
+        },
+        viewerId
+      );
+      return [
+        [
+          reply.id,
+          {
+            actorName: reply.authorName,
+            action,
+            quote: reply.body,
+            courseTitle: reply.courseTitle,
+            lessonTitle: reply.lessonTitle,
+            href: lessonHref(reply.courseSlug, reply.lessonId, reply.id),
+          },
+        ],
+      ];
+    })
   );
 }
 
 // ─── discussion_question: a Discussion Question; the subject is the Question ───
 
-/** The course a Comment was posted on, with its Instructor. */
-function courseForComment(db: Queryable, commentId: number) {
-  return db
-    .select({ courseId: courses.id, instructorId: courses.instructorId })
-    .from(comments)
-    .innerJoin(lessons, eq(comments.lessonId, lessons.id))
-    .innerJoin(modules, eq(lessons.moduleId, modules.id))
-    .innerJoin(courses, eq(modules.courseId, courses.id))
-    .where(eq(comments.id, commentId))
-    .get();
-}
-
 function isPlatformAdmin(db: Queryable, userId: number) {
-  const user = db
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId))
-    .get();
-  return user?.role === UserRole.Admin;
+  return userRole(db, userId) === UserRole.Admin;
 }
 
 function discussionQuestionAudience(
@@ -420,16 +444,16 @@ function discussionQuestionAudience(
     .from(comments)
     .where(eq(comments.id, questionId))
     .get();
-  if (!question || question.parentId !== null) return NOBODY;
+  if (!question || question.parentId !== null) return null;
 
   const course = courseForComment(tx, question.id);
-  if (!course) return NOBODY;
+  if (!course) return null;
 
   // A top-level post by staff is a Comment, not a Discussion Question.
   const byStaff =
     question.userId === course.instructorId ||
     isPlatformAdmin(tx, question.userId);
-  if (byStaff) return NOBODY;
+  if (byStaff) return null;
 
   return {
     subjectId: question.id,
@@ -442,29 +466,15 @@ function discussionQuestionFeedContent(
   db: Queryable,
   questionIds: number[]
 ): Map<number, FeedItemContent> {
-  const questions = db
-    .select({
-      id: comments.id,
-      body: comments.body,
-      actorName: users.name,
-      lessonId: lessons.id,
-      lessonTitle: lessons.title,
-      courseTitle: courses.title,
-      courseSlug: courses.slug,
-    })
-    .from(comments)
-    .innerJoin(users, eq(comments.userId, users.id))
-    .innerJoin(lessons, eq(comments.lessonId, lessons.id))
-    .innerJoin(modules, eq(lessons.moduleId, modules.id))
-    .innerJoin(courses, eq(modules.courseId, courses.id))
-    .where(and(inArray(comments.id, questionIds), isNull(comments.deletedAt)))
-    .all();
+  const questions = commentsWithContext(db, questionIds).filter(
+    (question) => question.deletedAt === null
+  );
 
   return new Map(
     questions.map((question) => [
       question.id,
       {
-        actorName: question.actorName,
+        actorName: question.authorName,
         action: "asked a Discussion Question",
         quote: question.body,
         courseTitle: question.courseTitle,
@@ -488,7 +498,7 @@ function firstRatingAudience(tx: Tx, ratingId: number): Audience | null {
     .innerJoin(courses, eq(courseRatings.courseId, courses.id))
     .where(eq(courseRatings.id, ratingId))
     .get();
-  if (!rating) return NOBODY;
+  if (!rating) return null;
 
   return {
     subjectId: rating.id,
@@ -542,7 +552,7 @@ function enrollmentAudience(tx: Tx, enrollmentId: number): Audience | null {
     .innerJoin(courses, eq(enrollments.courseId, courses.id))
     .where(eq(enrollments.id, enrollmentId))
     .get();
-  if (!enrollment) return NOBODY;
+  if (!enrollment) return null;
 
   return {
     subjectId: enrollmentId,

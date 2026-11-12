@@ -4,7 +4,7 @@ import { comments, lessons, NotificationKind } from "~/db/schema";
 import { MAX_COMMENT_LENGTH, MIN_COMMENT_LENGTH } from "~/lib/comments";
 import {
   createNotifications,
-  markThreadNotificationsRead,
+  markDiscussionQuestionNotificationsRead,
 } from "~/lib/notifications.server";
 
 export type NewComment = {
@@ -73,11 +73,11 @@ export function createComment(tx: Tx, input: NewComment) {
     commentId: comment.id,
   });
 
-  // Replying to a thread means the replier has seen it, so their own
-  // Notifications about it are read. Kept apart from createNotifications,
+  // Replying to a Discussion Question means the replier has seen it, so their
+  // own Notifications about it are read. Kept apart from createNotifications,
   // which only ever creates.
   if (comment.parentId !== null) {
-    markThreadNotificationsRead(tx, userId, comment.parentId);
+    markDiscussionQuestionNotificationsRead(tx, userId, comment.parentId);
   }
 
   return comment;

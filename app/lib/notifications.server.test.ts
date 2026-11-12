@@ -391,8 +391,8 @@ describe("marking all Notifications read", () => {
   });
 });
 
-describe("replying marks the thread read", () => {
-  it("clears the Instructor's Notifications for a thread when they answer it", () => {
+describe("replying marks the Discussion Question read", () => {
+  it("clears the Instructor's Notifications about a Discussion Question when they answer it", () => {
     const peer = addStudent("Priya Shah");
     enroll(peer.id);
     const question = post(base.user.id, null, "Why use generics?");
@@ -413,7 +413,7 @@ describe("replying marks the thread read", () => {
     ]);
   });
 
-  it("clears a Student's own Notifications for a thread when they reply in it", () => {
+  it("clears a Student's own Notifications about a Discussion Question when they reply to it", () => {
     const question = post(base.user.id, null, "Why use generics?");
     post(base.instructor.id, question.id, "First answer.");
     post(base.instructor.id, question.id, "Second answer.");
@@ -424,7 +424,7 @@ describe("replying marks the thread read", () => {
     expect(countUnreadNotifications(testDb, base.user.id)).toBe(0);
   });
 
-  it("leaves other people's Notifications and other threads unread", () => {
+  it("leaves other people's Notifications and other Discussion Questions unread", () => {
     const peer = addStudent("Priya Shah");
     enroll(peer.id);
     const mine = post(base.user.id, null, "Why use generics?");
