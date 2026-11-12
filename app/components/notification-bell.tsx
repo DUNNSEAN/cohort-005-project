@@ -13,6 +13,7 @@ import {
 import { NotificationKind, UserRole } from "~/db/schema";
 import { cn, formatRelativeTime } from "~/lib/utils";
 import type { NotificationItem } from "~/lib/notifications.server";
+import { useUnreadCountPolling } from "./use-unread-count-polling";
 
 export interface NotificationBellProps {
   unreadCount: number;
@@ -36,6 +37,7 @@ export function NotificationBell({
   role,
 }: NotificationBellProps) {
   const [open, setOpen] = useState(false);
+  useUnreadCountPolling(unreadCount);
 
   return (
     <>
