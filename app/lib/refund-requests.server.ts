@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "~/db";
 import {
   coupons,
@@ -22,11 +22,13 @@ export function getLatestPurchase(userId: number, courseId: number) {
     .get();
 }
 
-export function getRefundRequestForPurchase(purchaseId: number) {
+/** The newest Refund Request on a Purchase: it can have several over time. */
+export function getLatestRefundRequestForPurchase(purchaseId: number) {
   return db
     .select()
     .from(refundRequests)
     .where(eq(refundRequests.purchaseId, purchaseId))
+    .orderBy(desc(refundRequests.requestedAt), desc(refundRequests.id))
     .get();
 }
 
@@ -94,20 +96,21 @@ function isClaimedTeamSeat(purchaseId: number) {
 
 /**
  * Where a learner stands on getting their money back for a course: their
- * latest Purchase, any Refund Request on it, and whether they may raise one.
+ * latest Purchase, the newest Refund Request on it, and whether they may
+ * raise one.
  * Null when they have not bought the course.
  */
 export function getRefundStanding(userId: number, courseId: number) {
   const purchase = getLatestPurchase(userId, courseId);
   if (!purchase) return null;
 
-  const refundRequest = getRefundRequestForPurchase(purchase.id) ?? null;
+  const refundRequest = getLatestRefundRequestForPurchase(purchase.id) ?? null;
   const lessonIds = getLessonIdsForCourse(courseId);
 
   const eligibility = checkRefundEligibility({
     purchasedAt: purchase.createdAt,
     now: new Date(),
-    hasRefundRequest: refundRequest !== null,
+    latestRefundRequestStatus: refundRequest?.status ?? null,
     isClaimedTeamSeat: isClaimedTeamSeat(purchase.id),
     secondsWatched: getSecondsWatched(userId, lessonIds),
     completedLessonCount: getCompletedLessonCount(userId, lessonIds),

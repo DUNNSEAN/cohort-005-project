@@ -7,6 +7,7 @@ import {
   uniqueIndex,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 export enum UserRole {
   Student = "student",
@@ -32,7 +33,7 @@ export enum QuestionType {
 }
 
 export enum RefundRequestStatus {
-  Requested = "requested",
+  Open = "open",
   Approved = "approved",
   Declined = "declined",
 }
@@ -229,8 +230,9 @@ export const purchases = sqliteTable(
   (table) => [index("purchases_course_idx").on(table.courseId)]
 );
 
-// A learner's Refund Request against a Purchase. A Purchase has at most one,
-// so a Decline is final. See GLOSSARY.md.
+// A buyer's Refund Request against a Purchase. A Purchase can have several
+// over time (a Declined one can be raised again), but only one Open at once.
+// See GLOSSARY.md.
 export const refundRequests = sqliteTable(
   "refund_requests",
   {
@@ -241,10 +243,13 @@ export const refundRequests = sqliteTable(
     status: text("status")
       .notNull()
       .$type<RefundRequestStatus>()
-      .default(RefundRequestStatus.Requested),
-    // The learner's own words, in the box on the course page.
+      .default(RefundRequestStatus.Open),
+    // The buyer's own words, in the box on the course page.
     reason: text("reason").notNull(),
-    // The Refund: null until the Refund Request is Approved.
+    // The Platform Admin's reason for declining, which the buyer sees.
+    declineReason: text("decline_reason"),
+    // The Refund, always the full amount paid: null unless the Refund Request
+    // is Approved. With no payment provider every Refund is a Pending Refund.
     amountRefunded: integer("amount_refunded"),
     requestedAt: text("requested_at")
       .notNull()
@@ -253,7 +258,10 @@ export const refundRequests = sqliteTable(
     resolvedByUserId: integer("resolved_by_user_id").references(() => users.id),
   },
   (table) => [
-    uniqueIndex("refund_requests_purchase_unique").on(table.purchaseId),
+    index("refund_requests_purchase_idx").on(table.purchaseId),
+    uniqueIndex("refund_requests_one_open_per_purchase")
+      .on(table.purchaseId)
+      .where(sql`status = 'open'`),
   ]
 );
 
