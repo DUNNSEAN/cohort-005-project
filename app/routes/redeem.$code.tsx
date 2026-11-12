@@ -13,6 +13,7 @@ import { data } from "react-router";
 import { db } from "~/db";
 import { purchases, coupons, courses, enrollments } from "~/db/schema";
 import { eq, and } from "drizzle-orm";
+import { enrollStudent } from "~/lib/enrollments.server";
 
 function getCourseById(id: number) {
   return db.select().from(courses).where(eq(courses.id, id)).get();
@@ -81,19 +82,16 @@ function redeemCoupon(
     };
   }
 
-  db.update(coupons)
-    .set({
-      redeemedByUserId: userId,
-      redeemedAt: new Date().toISOString(),
-    })
-    .where(eq(coupons.id, coupon.id))
-    .run();
-
-  const enrollment = db
-    .insert(enrollments)
-    .values({ userId, courseId: coupon.courseId })
-    .returning()
-    .get();
+  const enrollment = db.transaction((tx) => {
+    tx.update(coupons)
+      .set({
+        redeemedByUserId: userId,
+        redeemedAt: new Date().toISOString(),
+      })
+      .where(eq(coupons.id, coupon.id))
+      .run();
+    return enrollStudent(tx, userId, coupon.courseId);
+  });
 
   return { ok: true, enrollment };
 }
