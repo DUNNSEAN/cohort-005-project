@@ -187,6 +187,19 @@ export function markNotificationRead(
     .run();
 }
 
+/**
+ * Marks every Unread Notification the person has read, including ones the
+ * feed isn't showing, so the badge really goes to zero.
+ */
+export function markAllNotificationsRead(db: Queryable, userId: number) {
+  db.update(notifications)
+    .set({ readAt: new Date().toISOString() })
+    .where(
+      and(eq(notifications.recipientId, userId), isNull(notifications.readAt))
+    )
+    .run();
+}
+
 function render(
   db: Queryable,
   rows: NotificationRow[],

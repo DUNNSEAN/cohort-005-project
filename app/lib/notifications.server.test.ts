@@ -6,6 +6,7 @@ import { createComment } from "./comments.server";
 import {
   countUnreadNotifications,
   listNotifications,
+  markAllNotificationsRead,
   markNotificationRead,
 } from "./notifications.server";
 
@@ -212,5 +213,37 @@ describe("marking a Notification read", () => {
     listNotifications(testDb, base.user.id);
 
     expect(countUnreadNotifications(testDb, base.user.id)).toBe(1);
+  });
+});
+
+describe("marking all Notifications read", () => {
+  it("clears every Unread Notification, including ones the feed isn't showing", () => {
+    const question = post(base.user.id, null, "Why use generics?");
+    for (let i = 1; i <= 55; i++) {
+      post(base.instructor.id, question.id, `Answer ${i}.`);
+    }
+    expect(listNotifications(testDb, base.user.id)).toHaveLength(50);
+    expect(countUnreadNotifications(testDb, base.user.id)).toBe(55);
+
+    markAllNotificationsRead(testDb, base.user.id);
+
+    expect(countUnreadNotifications(testDb, base.user.id)).toBe(0);
+    expect(
+      listNotifications(testDb, base.user.id).every((item) => item.read)
+    ).toBe(true);
+  });
+
+  it("leaves other people's Notifications unread", () => {
+    const peer = addStudent("Priya Shah");
+    enroll(peer.id);
+    const mine = post(base.user.id, null, "Why use generics?");
+    const theirs = post(peer.id, null, "What about type guards?");
+    post(base.instructor.id, mine.id, "An answer.");
+    post(base.instructor.id, theirs.id, "Another answer.");
+
+    markAllNotificationsRead(testDb, base.user.id);
+
+    expect(countUnreadNotifications(testDb, base.user.id)).toBe(0);
+    expect(countUnreadNotifications(testDb, peer.id)).toBe(1);
   });
 });
