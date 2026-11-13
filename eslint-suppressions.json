@@ -1,0 +1,115 @@
+{
+  "app/routes/admin.courses.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    }
+  },
+  "app/routes/courses.$slug.$moduleId.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 3
+    }
+  },
+  "app/routes/courses.$slug.lessons.$lessonId.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    },
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 3
+    }
+  },
+  "app/routes/courses.$slug.purchase.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 2
+    }
+  },
+  "app/routes/courses.$slug.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 8
+    }
+  },
+  "app/routes/courses.$slug.welcome.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    }
+  },
+  "app/routes/courses.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 7
+    }
+  },
+  "app/routes/dashboard.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 5
+    }
+  },
+  "app/routes/home.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 2
+    }
+  },
+  "app/routes/instructor.$courseId.lessons.$lessonId.quiz.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    }
+  },
+  "app/routes/instructor.$courseId.modules.$moduleId.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    }
+  },
+  "app/routes/instructor.$courseId.students.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 4
+    }
+  },
+  "app/routes/instructor.$courseId.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 8
+    }
+  },
+  "app/routes/instructor.questions.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    }
+  },
+  "app/routes/instructor.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    }
+  },
+  "app/routes/layout.app.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 5
+    }
+  },
+  "app/routes/team.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 1
+    }
+  },
+  "request-logger/proxy.test.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 2
+    }
+  },
+  "request-logger/proxy.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 3
+    }
+  },
+  "request-logger/render.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "request-logger/render.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 37
+    }
+  },
+  "scripts/seed.ts": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 2
+    }
+  }
+}

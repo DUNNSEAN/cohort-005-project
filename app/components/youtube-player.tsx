@@ -65,9 +65,7 @@ function loadYouTubeAPI(): Promise<void> {
 export function YouTubePlayer({
   videoUrl,
   lessonId,
-  title,
   startPosition,
-  durationMinutes,
   watchProgress: initialProgress,
   trackingEnabled,
   autoplay = false,
@@ -77,9 +75,6 @@ export function YouTubePlayer({
   const playerRef = useRef<YT.Player | null>(null);
   const trackingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [progress, setProgress] = useState(initialProgress);
-  const [videoDuration, setVideoDuration] = useState(
-    durationMinutes ? durationMinutes * 60 : 0
-  );
 
   const videoId = extractVideoId(videoUrl);
 
@@ -104,7 +99,6 @@ export function YouTubePlayer({
     const currentTime = player.getCurrentTime();
     const duration = player.getDuration();
     if (duration > 0) {
-      setVideoDuration(duration);
       const pct = Math.min(Math.round((currentTime / duration) * 100), 100);
       setProgress((prev) => Math.max(prev, pct));
     }
@@ -149,10 +143,6 @@ export function YouTubePlayer({
         events: {
           onReady: () => {
             playerRef.current = player;
-            if (player && typeof player.getDuration === "function") {
-              const d = player.getDuration();
-              if (d > 0) setVideoDuration(d);
-            }
             if (autoplay && player && typeof player.playVideo === "function") {
               try { player.playVideo(); } catch { /* silently fail */ }
             }

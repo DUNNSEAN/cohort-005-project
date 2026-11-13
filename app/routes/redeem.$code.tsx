@@ -231,12 +231,6 @@ export default function Redeem({
     }
   }, [fetcher.data, actionData]);
 
-  // Determine which state to show
-  const canRedeem =
-    !alreadyRedeemed &&
-    !alreadyEnrolled &&
-    !countryMismatch &&
-    !seatFreezeMessage;
 
   return (
     <div className="mx-auto max-w-2xl p-6 lg:p-8">

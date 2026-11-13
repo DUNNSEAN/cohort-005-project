@@ -15,11 +15,4 @@ component a second path to forget about.
 ## Parse untrusted input with a schema
 
 Form data, search parameters and request bodies get a zod schema before the
-values reach any query. Do not read `formData.get("x") as string`. The cast
-is a lie the type checker believes.
-
-## Do not write `any`, and do not write `!`
-
-Both switch the type checker off at the exact point you are least sure. If a
-value can be missing, narrow it with a check. If you cannot name the type,
-the shape is wrong — fix the shape.
+values reach any query.
