@@ -604,7 +604,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
     ? `/courses/${course.slug}/purchase`
     : `/signup?redirectTo=${encodeURIComponent(`/courses/${course.slug}/purchase`)}`;
 
-  const teamPurchaseLink = currentUserId
+  const teamLicenceLink = currentUserId
     ? `/courses/${course.slug}/purchase?mode=team`
     : `/signup?redirectTo=${encodeURIComponent(`/courses/${course.slug}/purchase?mode=team`)}`;
 
@@ -647,7 +647,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
         </TabsContent>
         <TabsContent value="team" forceMount>
           {priceDisplay}
-          <Link to={teamPurchaseLink}>
+          <Link to={teamLicenceLink}>
             <Button size="lg" variant="outline" className="w-full">
               Buy for Your Team
             </Button>
@@ -802,7 +802,7 @@ export default function CourseDetail({ loaderData }: Route.ComponentProps) {
                         </Link>
                       ) : null;
                     })()}
-                  <Link to={teamPurchaseLink}>
+                  <Link to={teamLicenceLink}>
                     <Button variant="outline" className="w-full">
                       <Users className="mr-2 size-4" />
                       Buy More Seats

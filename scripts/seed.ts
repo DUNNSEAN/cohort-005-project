@@ -134,7 +134,7 @@ async function seed() {
 
   // Owns no courses — the instructor views must survive an instructor with
   // nothing to show.
-  const [instructor3] = db
+  db
     .insert(schema.users)
     .values({
       name: "Priya Nair",
@@ -201,7 +201,7 @@ async function seed() {
     .returning()
     .all();
 
-  // The wider student body. These carry the bulk purchase and progress history
+  // The wider student body. These carry most of the purchase and progress history
   // generated at the bottom of this file. Sign-up dates are spread across the
   // last twelve months, including the last few days.
   const cohortNames = [
@@ -2207,7 +2207,7 @@ This course is still in draft while the cluster examples are rewritten against t
   // ─── Purchases ───
   // Individual purchases for enrolled students
 
-  const [purchase1] = db
+  db
     .insert(schema.purchases)
     .values({
       userId: students[0].id, // Emma — bought course 1 individually
@@ -2279,8 +2279,8 @@ This course is still in draft while the cluster examples are rewritten against t
     })
     .run();
 
-  // Team purchase by Bossy McBossface for course 2 (5 seats)
-  const [teamPurchase] = db
+  // Team Licence bought by Bossy McBossface for course 2 (5 seats)
+  const [teamLicence] = db
     .insert(schema.purchases)
     .values({
       userId: bossy.id,
@@ -2292,7 +2292,7 @@ This course is still in draft while the cluster examples are rewritten against t
     .returning()
     .all();
 
-  // Generate 5 coupons for the team purchase
+  // Generate 5 coupons for the Team Licence
   const couponCodes = [
     "TEAM-NODEJS-A1B2C3",
     "TEAM-NODEJS-D4E5F6",
@@ -2308,7 +2308,7 @@ This course is still in draft while the cluster examples are rewritten against t
         teamId: team1.id,
         courseId: course2.id,
         code,
-        purchaseId: teamPurchase.id,
+        purchaseId: teamLicence.id,
         createdAt: daysAgo(30),
       }))
     )
@@ -2336,7 +2336,7 @@ This course is still in draft while the cluster examples are rewritten against t
     .run();
 
   console.log(
-    `Created 1 team with Bossy McBossface as admin, 1 team purchase, and ${seededCoupons.length} coupons (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed, ${countRows(schema.coupons, isNull(schema.coupons.redeemedByUserId))} available).`
+    `Created 1 team with Bossy McBossface as admin, 1 Team Licence, and ${seededCoupons.length} coupons (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed, ${countRows(schema.coupons, isNull(schema.coupons.redeemedByUserId))} available).`
   );
 
   // ─── Generated history ───
@@ -2589,12 +2589,12 @@ This course is still in draft while the cluster examples are rewritten against t
     `Created ${generatedPurchases} generated purchases, ${generatedEnrollments} enrolments and ${generatedProgressRows} lesson progress rows.`
   );
 
-  // ─── Further team purchases ───
+  // ─── Further Team Licences ───
   // Two more seat purchases so team revenue is not a single row, in mixed
   // redemption states: one team most of the way through its seats, one that has
   // bought and redeemed nothing yet.
 
-  function createTeamPurchase(
+  function createTeamLicence(
     adminEmail: string,
     course: typeof course1,
     seats: number,
@@ -2680,7 +2680,7 @@ This course is still in draft while the cluster examples are rewritten against t
   }
 
   // Eight seats on TypeScript, six redeemed.
-  createTeamPurchase(
+  createTeamLicence(
     "ava.nakamura@student.dev",
     course1,
     8,
@@ -2699,7 +2699,7 @@ This course is still in draft while the cluster examples are rewritten against t
   // Four seats on Design Systems, bought during launch week, none redeemed yet.
   // Marta has raised a Refund Request on it, so its Seats are frozen until a
   // Platform Admin decides, and with no Claimed Seat it can be approved.
-  const martasTeamLicence = createTeamPurchase(
+  const martasTeamLicence = createTeamLicence(
     "marta.novak@student.dev",
     course3,
     4,
@@ -2719,7 +2719,7 @@ This course is still in draft while the cluster examples are rewritten against t
     .run();
 
   // ─── Liam's Refund Request ───
-  // One learner part-way through a recent Purchase who has raised a Refund
+  // One student part-way through a recent Purchase who has raised a Refund
   // Request that is still Open, so /admin/refunds lists it and settings and
   // the course page show its status. The dates count back from today, so the Purchase is always
   // inside its Refund Window whenever you seed.
@@ -2779,7 +2779,7 @@ This course is still in draft while the cluster examples are rewritten against t
     .run();
 
   // ─── Maya's Purchase ───
-  // A learner who bought course 1 two days ago and has not started it. A
+  // A student who bought course 1 two days ago and has not started it. A
   // Platform Admin declined her first Refund Request, and a Decline is not
   // final: the course page shows the reason and still offers "Request a
   // refund" whenever you seed.
@@ -2879,6 +2879,31 @@ This course is still in draft while the cluster examples are rewritten against t
   console.log(
     `  Teams: ${countRows(schema.teams)}, coupons: ${countRows(schema.coupons)} (${countRows(schema.coupons, isNotNull(schema.coupons.redeemedByUserId))} redeemed)`
   );
+
+  requireRowsInEveryTable();
 }
 
-seed().catch(console.error);
+// A table the seed leaves empty is a screen nobody can see working locally.
+function requireRowsInEveryTable() {
+  const tables = sqlite
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != '__drizzle_migrations'"
+    )
+    .all() as { name: string }[];
+  const empty = tables
+    .map((t) => t.name)
+    .filter(
+      (name) =>
+        sqlite.prepare(`SELECT 1 FROM "${name}" LIMIT 1`).get() === undefined
+    );
+  if (empty.length > 0) {
+    throw new Error(
+      `The seed left these tables empty: ${empty.join(", ")}. Insert rows for them in scripts/seed.ts.`
+    );
+  }
+}
+
+seed().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

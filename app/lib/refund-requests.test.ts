@@ -25,7 +25,7 @@ function facts(overrides: Partial<RefundEligibilityFacts> = {}) {
 }
 
 describe("checkRefundEligibility", () => {
-  it("lets a learner who has barely started raise a Refund Request", () => {
+  it("lets a student who has barely started raise a Refund Request", () => {
     expect(checkRefundEligibility(facts())).toEqual({
       eligible: true,
       lastDayOfRefundWindow: "2026-01-15",
