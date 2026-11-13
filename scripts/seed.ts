@@ -5,6 +5,7 @@ import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import path from "path";
 import { fileURLToPath } from "url";
+import { rmSync } from "fs";
 import * as schema from "../app/db/schema";
 import {
   UserRole,
@@ -18,6 +19,12 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const migrationsFolder = path.resolve(__dirname, "../drizzle");
+
+// data.db holds nothing but seed data, so start from an empty file. Dropping
+// tables one by one broke whenever a new table was left off the drop list.
+for (const file of ["data.db", "data.db-shm", "data.db-wal"]) {
+  rmSync(file, { force: true });
+}
 
 const sqlite = new Database("data.db");
 sqlite.pragma("journal_mode = WAL");
@@ -62,32 +69,6 @@ function makeRandom(seed: number): () => number {
 
 async function seed() {
   console.log("Seeding database...");
-
-  // Drop and recreate tables for a clean seed
-  sqlite.exec(`
-    DROP TABLE IF EXISTS comments;
-    DROP TABLE IF EXISTS course_ratings;
-    DROP TABLE IF EXISTS video_watch_events;
-    DROP TABLE IF EXISTS quiz_answers;
-    DROP TABLE IF EXISTS quiz_attempts;
-    DROP TABLE IF EXISTS quiz_options;
-    DROP TABLE IF EXISTS quiz_questions;
-    DROP TABLE IF EXISTS quizzes;
-    DROP TABLE IF EXISTS lesson_progress;
-    DROP TABLE IF EXISTS coupons;
-    DROP TABLE IF EXISTS team_members;
-    DROP TABLE IF EXISTS teams;
-    DROP TABLE IF EXISTS refund_requests;
-    DROP TABLE IF EXISTS refunds; -- the old name of refund_requests, in databases seeded before the rename
-    DROP TABLE IF EXISTS purchases;
-    DROP TABLE IF EXISTS enrollments;
-    DROP TABLE IF EXISTS lessons;
-    DROP TABLE IF EXISTS modules;
-    DROP TABLE IF EXISTS courses;
-    DROP TABLE IF EXISTS categories;
-    DROP TABLE IF EXISTS users;
-    DROP TABLE IF EXISTS __drizzle_migrations;
-  `);
 
   // Create tables using the same Drizzle migrations as the live database
   migrate(db, { migrationsFolder });
