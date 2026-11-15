@@ -21,6 +21,7 @@ import { data } from "react-router";
 import { db } from "~/db";
 import { purchases, coupons, courses } from "~/db/schema";
 import { eq } from "drizzle-orm";
+import { permissions } from "~/modules/permissions/index.server";
 
 function getCourseById(id: number) {
   return db.select().from(courses).where(eq(courses.id, id)).get();
@@ -103,10 +104,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 export async function action({ params, request }: Route.ActionArgs) {
   const { code } = parseParams(params, redeemParamsSchema);
 
-  const currentUserId = await getCurrentUserId(request);
-  if (!currentUserId) {
-    throw data("You must be logged in.", { status: 401 });
-  }
+  const { userId: currentUserId } = await permissions.requireSignedIn(request);
 
   const formData = await request.formData();
   const parsed = parseFormData(formData, redeemActionSchema);
