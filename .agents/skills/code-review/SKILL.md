@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\"."
+description: "Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes: Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to \"review since X\", or to review and fix."
 ---
 
 Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
@@ -78,6 +78,21 @@ If the spec is missing, skip the Spec sub-agent and note this in the final repor
 Present the two reports under `## Standards` and `## Spec` headings, verbatim or lightly cleaned. Do **not** merge or rerank findings, because the two axes are deliberately separate (see _Why two axes_).
 
 End with a one-line summary: total findings per axis, and the worst issue _within each axis_ (if any). Don't pick a single winner across axes: that's the reranking the separation exists to prevent.
+
+### 6. Fix, then review again
+
+Run this step only when the user asked you to fix what the review found. Your fixes are new code, and they get the same review the original code got.
+
+1. Fix the findings and run the repo's verification checks.
+2. Commit the fixes on the branch without pushing, so the diff command from step 1 includes them.
+3. Run steps 4 and 5 again on the same fixed point, with two new sub-agents.
+4. Fix what the re-review finds and repeat from 2.
+
+Done when a re-review reports no hard Standards violations and nothing missing or wrong on the Spec axis. Stop after three rounds and report what is still open.
+
+If the PR body has screenshots or output from before your fixes, they show code that no longer exists. Retake them at the reviewed commit, or remove them and say so in the body.
+
+Report every round: what each review found and what you fixed. Push only when the user says to.
 
 ## Why two axes
 
