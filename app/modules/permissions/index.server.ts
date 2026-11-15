@@ -11,7 +11,18 @@ import {
   type Viewer,
 } from "./lib/permissions";
 
+import {
+  contentPermission,
+  lessonCourse,
+  requireAllowed,
+  requireCourse,
+  type ContentPermission,
+} from "./lib/content";
+
 export type { Course, Viewer } from "./lib/permissions";
+export type { ContentPermission, ContentVerdict } from "./lib/content";
+
+export type LessonPermission = ContentPermission & { courseId: number };
 
 /**
  * Every Permission on Cadence: what a person may do, decided by their role,
@@ -65,6 +76,55 @@ export function createPermissions(database: Db) {
         courseId
       );
       return { viewer: toViewer(signedIn), course };
+    },
+
+    /**
+     * May they read this course's content? The Owning Instructor and Platform
+     * Admins always may; a Student needs an Enrollment that isn't PPP-blocked.
+     * 401 signed out, 403 otherwise, 404 when the course doesn't exist.
+     */
+    async requireCanViewCourse(
+      request: Request,
+      courseId: number
+    ): Promise<{ viewer: Viewer; canManage: boolean }> {
+      const course = requireCourse(database, courseId);
+      const permission = await contentPermission(database, request, course);
+      return {
+        viewer: requireAllowed(permission),
+        canManage: permission.canManage,
+      };
+    },
+
+    /**
+     * May they read this lesson? Checked against the course the lesson
+     * belongs to, whatever course the URL names. Throws like
+     * `requireCanViewCourse`, and 404 when the lesson doesn't exist.
+     */
+    async requireCanViewLesson(
+      request: Request,
+      lessonId: number
+    ): Promise<{ viewer: Viewer; canManage: boolean; courseId: number }> {
+      const course = lessonCourse(database, lessonId);
+      const permission = await contentPermission(database, request, course);
+      return {
+        viewer: requireAllowed(permission),
+        canManage: permission.canManage,
+        courseId: course.id,
+      };
+    },
+
+    /**
+     * The same question as `requireCanViewLesson`, answered without
+     * throwing, so the lesson page can render a paywall preview for people
+     * who may not read it. Only a missing lesson throws (404).
+     */
+    async lessonPermission(
+      request: Request,
+      lessonId: number
+    ): Promise<LessonPermission> {
+      const course = lessonCourse(database, lessonId);
+      const permission = await contentPermission(database, request, course);
+      return { ...permission, courseId: course.id };
     },
   };
 }

@@ -69,3 +69,34 @@ export function addCourse(
     .returning()
     .get();
 }
+
+export function addLesson(db: TestDb, courseId: number) {
+  const module = db
+    .insert(schema.modules)
+    .values({ courseId, title: "Module", position: 1 })
+    .returning()
+    .get();
+  return db
+    .insert(schema.lessons)
+    .values({ moduleId: module.id, title: "Lesson", position: 1 })
+    .returning()
+    .get();
+}
+
+/** An Individual Purchase and the Enrollment it gives. */
+export function enroll(
+  db: TestDb,
+  userId: number,
+  courseId: number,
+  { purchaseCountry }: { purchaseCountry?: string | null } = {}
+) {
+  db.insert(schema.enrollments).values({ userId, courseId }).run();
+  db.insert(schema.purchases)
+    .values({
+      userId,
+      courseId,
+      amountPaid: 2500,
+      country: purchaseCountry ?? null,
+    })
+    .run();
+}
