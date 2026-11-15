@@ -1,12 +1,17 @@
 import { db } from "~/db";
 import {
+  requireCanCreateCourse,
+  requireCanManageCourse,
+  requireInstructor,
+  requirePlatformAdmin,
   requireSignedIn,
   toViewer,
+  type Course,
   type Db,
   type Viewer,
 } from "./lib/permissions";
 
-export type { Viewer } from "./lib/permissions";
+export type { Course, Viewer } from "./lib/permissions";
 
 /**
  * Every Permission on Cadence: what a person may do, decided by their role,
@@ -25,6 +30,41 @@ export function createPermissions(database: Db) {
     /** Anyone signed in. */
     async requireSignedIn(request: Request): Promise<Viewer> {
       return toViewer(await requireSignedIn(database, request));
+    },
+
+    /** Only a Platform Admin. */
+    async requirePlatformAdmin(request: Request): Promise<Viewer> {
+      return toViewer(await requirePlatformAdmin(database, request));
+    },
+
+    /**
+     * An Instructor or a Platform Admin, for pages that span all of someone's
+     * courses rather than one course.
+     */
+    async requireInstructor(request: Request): Promise<Viewer> {
+      return toViewer(await requireInstructor(database, request));
+    },
+
+    /** Only an Instructor: a Platform Admin can't create courses. */
+    async requireCanCreateCourse(request: Request): Promise<Viewer> {
+      return toViewer(await requireCanCreateCourse(database, request));
+    },
+
+    /**
+     * The course's Owning Instructor, or a Platform Admin. Returns the course
+     * row it loaded so the caller needn't fetch it again. 404 when the course
+     * doesn't exist, checked before ownership.
+     */
+    async requireCanManageCourse(
+      request: Request,
+      courseId: number
+    ): Promise<{ viewer: Viewer; course: Course }> {
+      const { signedIn, course } = await requireCanManageCourse(
+        database,
+        request,
+        courseId
+      );
+      return { viewer: toViewer(signedIn), course };
     },
   };
 }

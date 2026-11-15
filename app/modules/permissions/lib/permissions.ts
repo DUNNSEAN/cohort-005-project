@@ -2,7 +2,7 @@ import { data } from "react-router";
 import { eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import * as schema from "~/db/schema";
-import { UserRole, users } from "~/db/schema";
+import { UserRole, courses, users } from "~/db/schema";
 import { getCurrentUserId } from "~/lib/session";
 
 export type Db = BetterSQLite3Database<typeof schema>;
@@ -53,4 +53,77 @@ export async function requireSignedIn(
   request: Request
 ): Promise<SignedIn> {
   return (await findSignedIn(db, request)) ?? signedOut();
+}
+
+export async function requirePlatformAdmin(
+  db: Db,
+  request: Request
+): Promise<SignedIn> {
+  const signedIn = await requireSignedIn(db, request);
+  if (!signedIn.isPlatformAdmin) {
+    throw data("Only Platform Admins can do that.", { status: 403 });
+  }
+  return signedIn;
+}
+
+/** An Instructor, or a Platform Admin, who may see every instructor page. */
+export async function requireInstructor(
+  db: Db,
+  request: Request
+): Promise<SignedIn> {
+  const signedIn = await requireSignedIn(db, request);
+  if (signedIn.role !== UserRole.Instructor && !signedIn.isPlatformAdmin) {
+    throw data("Only Instructors can do that.", { status: 403 });
+  }
+  return signedIn;
+}
+
+/**
+ * Only an Instructor. Creating a course makes you its Owning Instructor, which
+ * a Platform Admin is not.
+ */
+export async function requireCanCreateCourse(
+  db: Db,
+  request: Request
+): Promise<SignedIn> {
+  const signedIn = await requireSignedIn(db, request);
+  if (signedIn.role !== UserRole.Instructor) {
+    throw data("Only Instructors can create courses.", { status: 403 });
+  }
+  return signedIn;
+}
+
+export type Course = typeof courses.$inferSelect;
+
+/**
+ * The Owning Instructor or a Platform Admin. Ownership alone isn't enough:
+ * someone who is no longer an Instructor stops owning their courses.
+ */
+export function canManage(signedIn: SignedIn, course: Course): boolean {
+  return (
+    signedIn.isPlatformAdmin ||
+    (signedIn.role === UserRole.Instructor &&
+      course.instructorId === signedIn.userId)
+  );
+}
+
+export function courseNotFound(): never {
+  throw data("Course not found.", { status: 404 });
+}
+
+export function findCourse(db: Db, courseId: number): Course | undefined {
+  return db.select().from(courses).where(eq(courses.id, courseId)).get();
+}
+
+export async function requireCanManageCourse(
+  db: Db,
+  request: Request,
+  courseId: number
+): Promise<{ signedIn: SignedIn; course: Course }> {
+  const signedIn = await requireSignedIn(db, request);
+  const course = findCourse(db, courseId) ?? courseNotFound();
+  if (!canManage(signedIn, course)) {
+    throw data("Only this course's Instructor can do that.", { status: 403 });
+  }
+  return { signedIn, course };
 }
