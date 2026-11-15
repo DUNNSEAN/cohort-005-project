@@ -3,10 +3,8 @@ import { Link, redirect, useFetcher } from "react-router";
 import { toast } from "sonner";
 import { z } from "zod";
 import type { Route } from "./+types/instructor.new";
-import { getCurrentUserId } from "~/lib/session";
 import { parseFormData } from "~/lib/validation";
 import { markdown } from "~/lib/text";
-import { UserRole } from "~/db/schema";
 import { db } from "~/db";
 import { users, categories, courses, CourseStatus } from "~/db/schema";
 import { eq } from "drizzle-orm";
@@ -24,10 +22,7 @@ import {
 } from "~/components/ui/select";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { data, isRouteErrorResponse } from "react-router";
-
-function getUserById(id: number) {
-  return db.select().from(users).where(eq(users.id, id)).get();
-}
+import { permissions } from "~/modules/permissions/index.server";
 
 function getAllCategories() {
   return db.select().from(categories).orderBy(categories.name).all();
@@ -89,21 +84,7 @@ export function meta() {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const currentUserId = await getCurrentUserId(request);
-
-  if (!currentUserId) {
-    throw data("Select a user from the DevUI panel to create a course.", {
-      status: 401,
-    });
-  }
-
-  const user = getUserById(currentUserId);
-
-  if (!user || user.role !== UserRole.Instructor) {
-    throw data("Only instructors can create courses.", {
-      status: 403,
-    });
-  }
+  await permissions.requireCanCreateCourse(request);
 
   const categories = getAllCategories();
 
@@ -111,17 +92,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const currentUserId = await getCurrentUserId(request);
-
-  if (!currentUserId) {
-    throw data("You must be logged in to create a course.", { status: 401 });
-  }
-
-  const user = getUserById(currentUserId);
-
-  if (!user || user.role !== UserRole.Instructor) {
-    throw data("Only instructors can create courses.", { status: 403 });
-  }
+  const { userId: currentUserId } = await permissions.requireCanCreateCourse(request);
 
   const formData = await request.formData();
   const parsed = parseFormData(formData, newCourseSchema);
