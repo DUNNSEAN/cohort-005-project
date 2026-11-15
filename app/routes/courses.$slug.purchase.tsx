@@ -242,7 +242,7 @@ function generateCoupons(
   return created;
 }
 
-function createTeamPurchase(
+function createTeamLicence(
   userId: number,
   courseId: number,
   amountPaid: number,
@@ -262,7 +262,7 @@ const purchaseParamsSchema = z.object({
 const purchaseActionSchema = z.discriminatedUnion("intent", [
   z.object({ intent: z.literal("confirm-purchase") }),
   z.object({
-    intent: z.literal("confirm-team-purchase"),
+    intent: z.literal("confirm-team-licence"),
     quantity: z.coerce.number().int().min(1),
   }),
 ]);
@@ -372,10 +372,10 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw redirect(`/courses/${slug}/welcome`);
   }
 
-  // Team purchase — user does NOT get enrolled themselves
+  // Team Licence — the buyer does NOT get an Enrollment themselves
   const { quantity } = parsed.data;
   const totalPrice = pppPrice * quantity;
-  createTeamPurchase(currentUserId, course.id, totalPrice, country, quantity);
+  createTeamLicence(currentUserId, course.id, totalPrice, country, quantity);
   throw redirect(`/team`);
 }
 
@@ -602,7 +602,7 @@ export default function PurchaseConfirmation({
                         <input
                           type="hidden"
                           name="intent"
-                          value="confirm-team-purchase"
+                          value="confirm-team-licence"
                         />
                         <input type="hidden" name="quantity" value={quantity} />
                         <Button size="lg" disabled={isSubmitting}>

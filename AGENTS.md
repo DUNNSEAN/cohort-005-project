@@ -3,7 +3,8 @@
 Do these checks in this order before you report a change to `app/` as complete:
 
 1. `npm run typecheck`
-2. `npm run test`
+2. `npm run lint`
+3. `npm run test`
 
 ## When something breaks
 
@@ -11,6 +12,7 @@ Do these checks in this order before you report a change to `app/` as complete:
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | 401 "Select a user from the DevUI panel"        | No user in the session — switch users and country in the floating panel (`app/components/dev-ui.tsx`). |
 | `tsc` reports every `./+types/*` import missing | Typegen has not run. Use `npm run typecheck`, which runs `react-router typegen` first.                 |
+| ESLint reports unused suppressions               | You fixed a violation listed in `eslint-suppressions.json`. Run `npx eslint . --prune-suppressions`.   |
 
 ## Agent skills
 

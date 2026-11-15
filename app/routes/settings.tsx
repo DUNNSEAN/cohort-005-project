@@ -65,9 +65,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("User not found.", { status: 404 });
   }
 
-  // Every Refund Request the learner has made, whatever its outcome, so a
+  // Every Refund Request the student has made, whatever its outcome, so a
   // Declined one does not silently disappear.
-  const learnerRefundRequests = db
+  const studentRefundRequests = db
     .select({
       id: refundRequests.id,
       status: refundRequests.status,
@@ -94,7 +94,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       bio: currentUser.bio,
       role: currentUser.role,
     },
-    refundRequests: learnerRefundRequests,
+    refundRequests: studentRefundRequests,
   };
 }
 

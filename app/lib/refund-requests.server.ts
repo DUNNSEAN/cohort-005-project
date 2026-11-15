@@ -12,7 +12,7 @@ import {
 } from "~/db/schema";
 import { checkRefundEligibility } from "~/lib/refund-requests";
 
-/** The learner's most recent Purchase of a course, if they have one. */
+/** The student's most recent Purchase of a course, if they have one. */
 export function getLatestPurchase(userId: number, courseId: number) {
   return db
     .select()
@@ -81,7 +81,7 @@ function getCompletedLessonCount(userId: number, lessonIds: number[]) {
 }
 
 // A seat that came out of a team licence, and has been claimed, belongs to
-// the team — the learner cannot hand it back on their own.
+// the team — the student cannot hand it back on their own.
 function isClaimedTeamSeat(purchaseId: number) {
   return Boolean(
     db
@@ -95,7 +95,7 @@ function isClaimedTeamSeat(purchaseId: number) {
 }
 
 /**
- * Where a learner stands on getting their money back for a course: their
+ * Where a student stands on getting their money back for a course: their
  * latest Purchase, the newest Refund Request on it, and whether they may
  * raise one.
  * Null when they have not bought the course.

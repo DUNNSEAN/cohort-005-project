@@ -83,7 +83,7 @@ export function checkRefundEligibility(
   return { eligible: true, lastDayOfRefundWindow: lastDay };
 }
 
-/** What the learner is told when the server turns a Refund Request away. */
+/** What the student is told when the server turns a Refund Request away. */
 export const REFUND_INELIGIBLE_MESSAGES: Record<RefundIneligibleReason, string> =
   {
     "request-open":
@@ -98,7 +98,7 @@ export const REFUND_INELIGIBLE_MESSAGES: Record<RefundIneligibleReason, string> 
       "You have completed too much of this course to request a refund.",
   };
 
-/** The status a learner sees on one of their Refund Requests. */
+/** The status a student sees on one of their Refund Requests. */
 export const REFUND_REQUEST_STATUS_LABELS: Record<RefundRequestStatus, string> =
   {
     [RefundRequestStatus.Open]: "Open",
