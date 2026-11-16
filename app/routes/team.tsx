@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { toast } from "sonner";
 import type { Route } from "./+types/team";
-import { getCurrentUserId } from "~/lib/session";
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
@@ -25,6 +24,7 @@ import {
   type SeatAvailability,
 } from "~/lib/refunds.server";
 import { formatPrice } from "~/lib/utils";
+import { permissions } from "~/modules/permissions/index.server";
 
 function getTeamForAdmin(userId: number) {
   const membership = db
@@ -81,11 +81,7 @@ export function meta() {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const currentUserId = await getCurrentUserId(request);
-
-  if (!currentUserId) {
-    throw data("Select a user from the DevUI panel.", { status: 401 });
-  }
+  const { userId: currentUserId } = await permissions.requireSignedIn(request);
 
   const team = getTeamForAdmin(currentUserId);
 

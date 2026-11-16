@@ -27,3 +27,7 @@ Enforced by dependency-cruiser (`.dependency-cruiser.cjs`). Run `npm run lint:bo
 4. **No cycles.** No dependency cycles anywhere in `app/`.
 
 Modules are flat: one level of folders under `app/modules/`. A module may not contain another module.
+
+## Permissions
+
+A loader or action that rejects a request (401, 403) goes through `permissions/index.server.ts`. Don't compare roles, instructor ids or Enrollments by hand to decide whether someone may do something. Reading the current user id from the session (`getCurrentUserId`) is only for showing who is signed in.

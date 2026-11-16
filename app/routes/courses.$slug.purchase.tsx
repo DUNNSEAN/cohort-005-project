@@ -40,6 +40,7 @@ import { calculatePppPrice, getCountryTierInfo, COUNTRIES } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
 import { enrollStudent, isEnrolled } from "~/lib/enrollments.server";
 import { defaultNotifications } from "~/lib/notifications.server";
+import { permissions } from "~/modules/permissions/index.server";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -299,10 +300,7 @@ export async function action({ params, request }: Route.ActionArgs) {
     throw data("Course not found.", { status: 404 });
   }
 
-  const currentUserId = await getCurrentUserId(request);
-  if (!currentUserId) {
-    throw data("You must be logged in.", { status: 401 });
-  }
+  const { userId: currentUserId } = await permissions.requireSignedIn(request);
 
   const formData = await request.formData();
   const parsed = parseFormData(formData, purchaseActionSchema);

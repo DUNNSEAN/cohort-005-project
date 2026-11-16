@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Link, useFetcher, useNavigate } from "react-router";
 import { toast } from "sonner";
 import type { Route } from "./+types/courses.$slug.lessons.$lessonId";
-import { getCurrentUserId } from "~/lib/session";
-import { getAccess, requireContentAccess } from "~/lib/access.server";
 import { renderComment } from "~/lib/comment-markdown.server";
 import { markdown, type Markdown } from "~/lib/text";
 import {
@@ -56,6 +54,7 @@ import {
   NotebookPen,
   MapPin,
   PlayCircle,
+  Lock,
   ShieldAlert,
   XCircle,
   Trophy,
@@ -66,8 +65,9 @@ import { renderMarkdown } from "~/lib/markdown.server";
 import { YouTubePlayer } from "~/components/youtube-player";
 import { data, isRouteErrorResponse } from "react-router";
 import { z } from "zod";
-import { COUNTRIES } from "~/lib/ppp";
+import { countryName } from "~/lib/ppp";
 import { parseFormData, parseParams } from "~/lib/validation";
+import { permissions } from "~/modules/permissions/index.server";
 
 const lessonParamsSchema = z.object({
   slug: z.string().min(1),
@@ -191,18 +191,6 @@ function getLessonById(id: number) {
 
 function getModuleById(id: number) {
   return db.select().from(modules).where(eq(modules.id, id)).get();
-}
-
-/**
- * Throws 404 unless the lesson is in the course, so content access to one
- * course can't reach a lesson in another by posting its id to this route.
- */
-function requireLessonInCourse(lessonId: number, courseId: number) {
-  const lesson = getLessonById(lessonId);
-  const mod = lesson ? getModuleById(lesson.moduleId) : undefined;
-  if (!mod || mod.courseId !== courseId) {
-    throw data("Lesson not found in this course", { status: 404 });
-  }
 }
 
 function getUserById(id: number) {
@@ -669,16 +657,21 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw data("Lesson not found in this course", { status: 404 });
   }
 
-  const access = await getAccess(request, course.id);
-  const currentUserId = access.userId;
-  const enrolled = access.enrolled;
+  // Never throws for people who may not read the lesson: they get the
+  // paywall instead of the content.
+  const permission = await permissions.lessonPermission(request, lessonId);
+  const { verdict, enrolled, canManage } = permission;
+  const currentUserId = permission.viewer?.userId ?? null;
+  const canViewContent = verdict.allowed;
   let lessonStatus: string | null = null;
   let lastWatchPosition = 0;
   let watchProgress = 0;
   let lessonProgressMap: Record<number, string> = {};
 
   if (currentUserId) {
-    if (enrolled) {
+    // Progress is a Student's, and only once they can actually see the
+    // lesson: a PPP-blocked Student hasn't started it.
+    if (enrolled && canViewContent) {
       // Mark lesson as in-progress when viewed
       markLessonInProgress(currentUserId, lessonId);
       const progress = getLessonProgress(currentUserId, lessonId);
@@ -708,11 +701,6 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     }
   }
 
-  // PPP Access Guard — resolved by getAccess, which treats a blocked user as
-  // having no access to the course's content at all.
-  const { pppBlocked, pppBlockedCountry, pppPurchaseCountry, canViewContent } =
-    access;
-
   // Comments are confidential to the course: only people who can read the
   // lesson can read the discussion on it.
   const instructor = getUserById(course.instructorId);
@@ -732,9 +720,11 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       : undefined;
 
   // Render lesson content from Markdown to HTML server-side
-  const contentHtml = lesson.content
-    ? await renderMarkdown(lesson.content)
-    : null;
+  // Only people who may read the lesson are sent its body.
+  const contentHtml =
+    canViewContent && lesson.content
+      ? await renderMarkdown(lesson.content)
+      : null;
 
   // Build prev/next navigation
   const allLessons = flattenCourseLessons(courseWithDetails);
@@ -759,7 +749,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   } | null = null;
   let bestAttempt: { score: number; passed: boolean } | null = null;
 
-  if (quizRecord) {
+  if (quizRecord && canViewContent) {
     const quizData = getQuizWithQuestions(quizRecord.id);
     if (quizData) {
       // Strip isCorrect from options so answers aren't leaked to the client
@@ -806,7 +796,9 @@ export async function loader({ params, request }: Route.LoaderArgs) {
       id: mod.id,
       title: mod.title,
     },
-    lesson,
+    lesson: canViewContent
+      ? lesson
+      : { ...lesson, content: null, videoUrl: null, githubRepoUrl: null },
     contentHtml,
     lessonStatus,
     enrolled,
@@ -818,12 +810,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     lastWatchPosition,
     watchProgress,
     lessonProgressMap,
-    pppBlocked,
-    pppBlockedCountry,
-    pppPurchaseCountry,
+    verdict,
     comments,
     canViewContent,
-    canModerate: access.isStaff,
+    canModerate: canManage,
     instructorName: instructor?.name ?? "your instructor",
     bookmarked,
     note: note ? { body: note.body, updatedAt: note.updatedAt } : null,
@@ -833,28 +823,26 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 export async function action({ params, request }: Route.ActionArgs) {
   const { slug, lessonId } = parseParams(params, lessonParamsSchema);
 
-  const course = getCourseBySlug(slug);
-  if (!course) {
-    throw data("Course not found", { status: 404 });
-  }
+  // Every intent acts on this lesson, so every one is checked against the
+  // lesson's own course, whatever course the URL names. Loader guards don't
+  // protect actions.
+  const { viewer, canManage, courseId } =
+    await permissions.requireCanViewLesson(request, lessonId);
+  const currentUserId = viewer.userId;
 
-  const currentUserId = await getCurrentUserId(request);
-  if (!currentUserId) {
-    throw data("You must be logged in", { status: 401 });
+  const course = getCourseBySlug(slug);
+  if (!course || course.id !== courseId) {
+    throw data("Lesson not found in this course", { status: 404 });
   }
 
   const formData = await request.formData();
   const intent = formData.get("intent");
 
-  // Comment intents re-check access here rather than relying on the loader —
-  // loader guards don't protect actions.
   if (
     intent === "create-comment" ||
     intent === "edit-comment" ||
     intent === "delete-comment"
   ) {
-    const access = await requireContentAccess(request, course.id);
-
     try {
       if (intent === "create-comment") {
         const parsed = parseFormData(formData, createCommentSchema);
@@ -908,7 +896,7 @@ export async function action({ params, request }: Route.ActionArgs) {
         db,
         parsed.data.commentId,
         currentUserId,
-        access.isStaff,
+        canManage,
         new Date(),
         await defaultNotifications()
       );
@@ -924,12 +912,7 @@ export async function action({ params, request }: Route.ActionArgs) {
     }
   }
 
-  // Bookmark and Note intents re-check access here, like the comment intents
-  // above — loader guards don't protect actions.
   if (intent === "toggle-bookmark" || intent === "save-note") {
-    await requireContentAccess(request, course.id);
-    requireLessonInCourse(lessonId, course.id);
-
     if (intent === "toggle-bookmark") {
       const bookmarked = toggleBookmark(db, currentUserId, lessonId, new Date());
       return { ok: true, bookmarked };
@@ -959,6 +942,9 @@ export async function action({ params, request }: Route.ActionArgs) {
     const quizId = Number(formData.get("quizId"));
     if (isNaN(quizId)) {
       throw data("Invalid quiz ID", { status: 400 });
+    }
+    if (getQuizByLessonId(lessonId)?.id !== quizId) {
+      throw data("Quiz not found on this lesson", { status: 404 });
     }
 
     // Collect answers: form fields named "question-{questionId}" with value = optionId
@@ -1029,9 +1015,7 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
     lastWatchPosition,
     watchProgress,
     lessonProgressMap,
-    pppBlocked,
-    pppBlockedCountry,
-    pppPurchaseCountry,
+    verdict,
     comments,
     canViewContent,
     canModerate,
@@ -1063,15 +1047,9 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
   const quizResult = quizFetcher.data?.quizResult ?? null;
   const isSubmittingQuiz = quizFetcher.state !== "idle";
 
-  if (pppBlocked) {
-    const purchaseCountryName = pppPurchaseCountry
-      ? (COUNTRIES.find((c) => c.code === pppPurchaseCountry)?.name ??
-        pppPurchaseCountry)
-      : "your original country";
-    const currentCountryName = pppBlockedCountry
-      ? (COUNTRIES.find((c) => c.code === pppBlockedCountry)?.name ??
-        pppBlockedCountry)
-      : "a different country";
+  if (!verdict.allowed && verdict.reason === "ppp-blocked") {
+    const purchaseCountryName = countryName(verdict.purchaseCountry);
+    const currentCountryName = countryName(verdict.currentCountry);
 
     return (
       <div className="flex min-h-[60vh] items-center justify-center p-6">
@@ -1191,7 +1169,24 @@ export default function LessonViewer({ loaderData }: Route.ComponentProps) {
             />
           )}
 
-          {!contentHtml && !lesson.videoUrl && (
+          {/* Paywall — people who may not read the lesson get this instead */}
+          {!canViewContent && (
+            <Card className="mb-8">
+              <CardContent className="py-12 text-center">
+                <Lock className="mx-auto mb-4 size-10 text-muted-foreground" />
+                <p className="mb-4 text-muted-foreground">
+                  {!verdict.allowed && verdict.reason === "signed-out"
+                    ? "Sign in and enroll in this course to watch this lesson."
+                    : "Enroll in this course to watch this lesson."}
+                </p>
+                <Link to={`/courses/${course.slug}`}>
+                  <Button>View course</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+
+          {canViewContent && !contentHtml && !lesson.videoUrl && (
             <Card className="mb-8">
               <CardContent className="py-12 text-center text-muted-foreground">
                 No content has been added to this lesson yet.

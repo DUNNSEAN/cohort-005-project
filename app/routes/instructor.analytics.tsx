@@ -1,7 +1,6 @@
 import { Link, isRouteErrorResponse, useSearchParams } from "react-router";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import type { Route } from "./+types/instructor.analytics";
-import { requireInstructorOrAdmin } from "~/lib/access.server";
 import {
   ANALYTICS_RANGES,
   PLATFORM_FEE_PERCENT,
@@ -38,6 +37,7 @@ import {
 import { Skeleton } from "~/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/tabs";
 import { AlertTriangle, Rocket } from "lucide-react";
+import { permissions } from "~/modules/permissions/index.server";
 
 // ─── Instructor Analytics ───
 // What an instructor earned, and when. Three money figures rather than one:
@@ -64,7 +64,7 @@ export function meta() {
 }
 
 export async function loader({ request, url }: Route.LoaderArgs) {
-  const viewer = await requireInstructorOrAdmin(request);
+  const viewer = await permissions.requireInstructor(request);
   return instructorAnalytics.get(viewer, url.searchParams, new Date());
 }
 
@@ -621,7 +621,7 @@ export default function InstructorAnalytics({
   const {
     tab,
     range,
-    isAdmin,
+    isPlatformAdmin,
     instructorId,
     selectedCourseId,
     summary,
@@ -669,14 +669,14 @@ export default function InstructorAnalytics({
         <div>
           <h1 className="text-3xl font-bold">Analytics</h1>
           <p className="mt-1 text-muted-foreground">
-            {isAdmin && instructorId === null
+            {isPlatformAdmin && instructorId === null
               ? "Revenue across every instructor on the platform."
               : "Revenue and earnings for your courses."}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {isAdmin && (
+          {isPlatformAdmin && (
             <Select
               value={instructorId === null ? "all" : String(instructorId)}
               onValueChange={(value) =>

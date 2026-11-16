@@ -14,6 +14,10 @@ _Avoid_: Learner, User
 A person who builds and owns courses, and sees the Students enrolled on them.
 _Avoid_: Teacher, Author, Creator
 
+**Owning Instructor**:
+The Instructor who owns a particular course. Someone who is no longer an Instructor stops being the Owning Instructor of their courses.
+_Avoid_: Staff, Course owner, Author
+
 **Platform Admin**:
 A member of Cadence staff who runs the platform. Only a Platform Admin decides Refund Requests.
 _Avoid_: Admin (on its own), the team, Staff
@@ -21,6 +25,10 @@ _Avoid_: Admin (on its own), the team, Staff
 **Team Admin**:
 A Student who buys and manages a Team Licence. A Team Admin has no say over Refund Requests.
 _Avoid_: Admin (on its own)
+
+**Permission**:
+What a person may do on Cadence. It depends on their role, whether they are the Owning Instructor of a course, and their Enrollment on it.
+_Avoid_: Access (which is often used to mean Enrollment), Rights, Auth
 
 ### Enrollment
 
