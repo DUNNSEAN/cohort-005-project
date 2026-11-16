@@ -467,11 +467,21 @@ describe("content Permission", () => {
     });
   });
 
-  describe("requireCanViewCourse", () => {
+  describe("requireCanRateCourse", () => {
+    it("rejects a signed-out request with 401", async () => {
+      expect(
+        (
+          await rejection(
+            permissions.requireCanRateCourse(signedOutRequest(), paidCourse.id)
+          )
+        ).status
+      ).toBe(401);
+    });
+
     it("answers 404 for a missing course", async () => {
       expect(
         await rejection(
-          permissions.requireCanViewCourse(
+          permissions.requireCanRateCourse(
             await signedInRequest(student.id),
             9999
           )
@@ -479,12 +489,33 @@ describe("content Permission", () => {
       ).toEqual({ status: 404, message: "Course not found." });
     });
 
+    it("lets an enrolled Student rate", async () => {
+      enroll(db, student.id, paidCourse.id);
+      expect(
+        await permissions.requireCanRateCourse(
+          await signedInRequest(student.id),
+          paidCourse.id
+        )
+      ).toEqual({ userId: student.id, isPlatformAdmin: false });
+    });
+
+    it("rejects a Student with no Enrollment with 403", async () => {
+      expect(
+        await rejection(
+          permissions.requireCanRateCourse(
+            await signedInRequest(student.id),
+            paidCourse.id
+          )
+        )
+      ).toEqual({ status: 403, message: "You must be enrolled in this course." });
+    });
+
     it("rejects a PPP-blocked Student with 403", async () => {
       enroll(db, student.id, paidCourse.id, { purchaseCountry: REGIONAL });
       expect(
         (
           await rejection(
-            permissions.requireCanViewCourse(
+            permissions.requireCanRateCourse(
               await signedInRequest(student.id, { country: "GB" }),
               paidCourse.id
             )
@@ -493,17 +524,36 @@ describe("content Permission", () => {
       ).toBe(403);
     });
 
-    it("lets an enrolled Student in", async () => {
-      enroll(db, student.id, paidCourse.id);
+    it("never lets the Owning Instructor rate their own course", async () => {
+      enroll(db, instructor.id, paidCourse.id);
       expect(
-        await permissions.requireCanViewCourse(
-          await signedInRequest(student.id),
+        await rejection(
+          permissions.requireCanRateCourse(
+            await signedInRequest(instructor.id),
+            paidCourse.id
+          )
+        )
+      ).toEqual({ status: 403, message: "You can't rate your own course." });
+    });
+
+    it("needs an Enrollment for a Platform Admin too", async () => {
+      expect(
+        (
+          await rejection(
+            permissions.requireCanRateCourse(
+              await signedInRequest(platformAdmin.id),
+              paidCourse.id
+            )
+          )
+        ).status
+      ).toBe(403);
+      enroll(db, platformAdmin.id, paidCourse.id);
+      expect(
+        await permissions.requireCanRateCourse(
+          await signedInRequest(platformAdmin.id),
           paidCourse.id
         )
-      ).toEqual({
-        viewer: { userId: student.id, isPlatformAdmin: false },
-        canManage: false,
-      });
+      ).toEqual({ userId: platformAdmin.id, isPlatformAdmin: true });
     });
   });
 });

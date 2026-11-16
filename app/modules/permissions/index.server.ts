@@ -15,6 +15,7 @@ import {
   contentPermission,
   lessonCourse,
   requireAllowed,
+  requireCanRateCourse,
   requireCourse,
   type ContentPermission,
 } from "./lib/content";
@@ -79,26 +80,26 @@ export function createPermissions(database: Db) {
     },
 
     /**
-     * May they read this course's content? The Owning Instructor and Platform
-     * Admins always may; a Student needs an Enrollment that isn't PPP-blocked.
-     * 401 signed out, 403 otherwise, 404 when the course doesn't exist.
+     * May they rate this course? Students with an Enrollment that a PPP block
+     * doesn't stop. Never the Owning Instructor; a Platform Admin needs an
+     * Enrollment like anyone else. 401 signed out, 403 otherwise, 404 when
+     * the course doesn't exist.
      */
-    async requireCanViewCourse(
+    async requireCanRateCourse(
       request: Request,
       courseId: number
-    ): Promise<{ viewer: Viewer; canManage: boolean }> {
-      const course = requireCourse(database, courseId);
-      const permission = await contentPermission(database, request, course);
-      return {
-        viewer: requireAllowed(permission),
-        canManage: permission.canManage,
-      };
+    ): Promise<Viewer> {
+      return requireCanRateCourse(
+        database,
+        request,
+        requireCourse(database, courseId)
+      );
     },
 
     /**
      * May they read this lesson? Checked against the course the lesson
-     * belongs to, whatever course the URL names. Throws like
-     * `requireCanViewCourse`, and 404 when the lesson doesn't exist.
+     * belongs to, whatever course the URL names. 401 signed out,
+     * 403 not enrolled or PPP-blocked, 404 when the lesson doesn't exist.
      */
     async requireCanViewLesson(
       request: Request,

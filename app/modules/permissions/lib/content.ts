@@ -8,6 +8,7 @@ import {
   courseNotFound,
   findCourse,
   findSignedIn,
+  requireSignedIn,
   toViewer,
   type Course,
   type Db,
@@ -55,32 +56,42 @@ export async function contentPermission(
 
   const viewer = toViewer(signedIn);
   const manages = canManage(signedIn, course);
+  const { enrolled, verdict } = await studentVerdict(
+    db,
+    request,
+    signedIn.userId,
+    course
+  );
+  return {
+    viewer,
+    enrolled,
+    canManage: manages,
+    verdict: manages ? { allowed: true } : verdict,
+  };
+}
+
+/** A Student's verdict: an Enrollment that a PPP block doesn't stop. */
+async function studentVerdict(
+  db: Db,
+  request: Request,
+  userId: number,
+  course: Course
+): Promise<{ enrolled: boolean; verdict: ContentVerdict }> {
   const enrolled = !!db
     .select({ id: enrollments.id })
     .from(enrollments)
     .where(
-      and(
-        eq(enrollments.userId, signedIn.userId),
-        eq(enrollments.courseId, course.id)
-      )
+      and(eq(enrollments.userId, userId), eq(enrollments.courseId, course.id))
     )
     .get();
-  const result = { viewer, enrolled, canManage: manages };
-
-  if (manages) return { ...result, verdict: { allowed: true } };
   if (!enrolled) {
-    return { ...result, verdict: { allowed: false, reason: "not-enrolled" } };
+    return { enrolled, verdict: { allowed: false, reason: "not-enrolled" } };
   }
 
   const purchase = db
     .select({ country: purchases.country })
     .from(purchases)
-    .where(
-      and(
-        eq(purchases.userId, signedIn.userId),
-        eq(purchases.courseId, course.id)
-      )
-    )
+    .where(and(eq(purchases.userId, userId), eq(purchases.courseId, course.id)))
     .get();
   const block = findPppBlock(
     course,
@@ -89,12 +100,39 @@ export async function contentPermission(
   );
   if (block) {
     return {
-      ...result,
+      enrolled,
       verdict: { allowed: false, reason: "ppp-blocked", ...block },
     };
   }
+  return { enrolled, verdict: { allowed: true } };
+}
 
-  return { ...result, verdict: { allowed: true } };
+/**
+ * Rating a course is for its Students: an Enrollment a PPP block doesn't
+ * stop. The Owning Instructor can't rate their own course, and a Platform
+ * Admin needs an Enrollment like anyone else.
+ */
+export async function requireCanRateCourse(
+  db: Db,
+  request: Request,
+  course: Course
+): Promise<Viewer> {
+  const signedIn = await requireSignedIn(db, request);
+  if (course.instructorId === signedIn.userId) {
+    throw data("You can't rate your own course.", { status: 403 });
+  }
+  const { verdict } = await studentVerdict(
+    db,
+    request,
+    signedIn.userId,
+    course
+  );
+  return requireAllowed({
+    viewer: toViewer(signedIn),
+    enrolled: true,
+    canManage: false,
+    verdict,
+  });
 }
 
 /** The course a lesson belongs to. 404 when the lesson doesn't exist. */
