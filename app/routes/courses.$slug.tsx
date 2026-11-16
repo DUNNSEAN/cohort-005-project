@@ -52,6 +52,7 @@ import {
 import { parseFormData } from "~/lib/validation";
 import { MAX_RATING, MIN_RATING } from "~/lib/ratings";
 import { StarRating, StarRatingInput } from "~/components/star-rating";
+import { permissions } from "~/modules/permissions/index.server";
 
 function getCourseBySlug(slug: string) {
   return db.select().from(courses).where(eq(courses.slug, slug)).get();
@@ -451,22 +452,15 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 // Enrollment is handled via the purchase confirmation page — this action only
 // records star ratings.
 export async function action({ params, request }: Route.ActionArgs) {
-  const currentUserId = await getCurrentUserId(request);
-
-  if (!currentUserId) {
-    throw data("You must be logged in to rate a course.", { status: 401 });
-  }
-
   const course = getCourseBySlug(params.slug);
   if (!course) {
     throw data("Course not found", { status: 404 });
   }
 
-  if (!isUserEnrolled(currentUserId, course.id)) {
-    throw data("You must be enrolled in this course to rate it.", {
-      status: 403,
-    });
-  }
+  const { userId: currentUserId } = await permissions.requireCanRateCourse(
+    request,
+    course.id
+  );
 
   const formData = await request.formData();
   const parsed = parseFormData(formData, ratingSchema);
