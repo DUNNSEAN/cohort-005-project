@@ -1,4 +1,5 @@
 export {
+  getQuizById,
   getQuizByLessonId,
   getQuizWithQuestions,
   getBestAttempt,
