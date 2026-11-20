@@ -1,11 +1,24 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import * as schema from "~/db/schema";
-import { CourseStatus, LessonProgressStatus, UserRole } from "~/db/schema";
+import { CourseStatus, UserRole } from "~/db/schema";
 import { enrollStudentInTransaction } from "~/lib/enrollments.server";
 import { markdown } from "~/lib/text";
 import { createCourseCatalog } from "../index.server";
+
+// Lesson progress is written by lesson-viewer, which reads the app's shared
+// `db`, so the test swaps in its in-memory one.
+const testDb = vi.hoisted(() => ({ current: undefined as unknown }));
+vi.mock("~/db", () => ({
+  get db() {
+    return testDb.current;
+  },
+}));
+
+const { markLessonComplete, markLessonInProgress } = await import(
+  "~/modules/lesson-viewer/progress.server"
+);
 
 const NOW = new Date("2026-11-20T12:00:00.000Z");
 const ANYWHERE = { search: null, category: null };
@@ -16,14 +29,15 @@ let catalog: ReturnType<typeof createCourseCatalog>;
 
 beforeEach(() => {
   db = createTestDb();
+  testDb.current = db;
   base = seedBaseData(db);
   catalog = createCourseCatalog(db);
 });
 
 // ─── Fixtures ───
-// Course content, progress and ratings have no service that writes them, so
-// rows go in directly. Kept in one place so a schema change touches only this
-// block. Enrollments go through ~/lib/enrollments.server.
+// Course content and ratings have no service that writes them, so rows go in
+// directly. Kept in one place so a schema change touches only this block.
+// Enrollments and progress go through the code that owns them.
 
 function addLessons(courseId: number, count: number) {
   const module = db
@@ -41,9 +55,24 @@ function addLessons(courseId: number, count: number) {
 }
 
 function complete(userId: number, lessonId: number) {
-  db.insert(schema.lessonProgress)
-    .values({ userId, lessonId, status: LessonProgressStatus.Completed })
-    .run();
+  markLessonComplete(userId, lessonId, NOW);
+}
+
+function rate(courseId: number, ratings: number[]) {
+  for (const [i, rating] of ratings.entries()) {
+    const rater = db
+      .insert(schema.users)
+      .values({
+        name: `Rater ${i}`,
+        email: `rater${i}@example.com`,
+        role: UserRole.Student,
+      })
+      .returning()
+      .get();
+    db.insert(schema.courseRatings)
+      .values({ userId: rater.id, courseId, rating })
+      .run();
+  }
 }
 
 function addCourse(title: string, status = CourseStatus.Published) {
@@ -153,13 +182,7 @@ describe("progress on an enrolled course", () => {
     enrol(base.user.id, base.course.id);
     complete(base.user.id, lessons[0].id);
     complete(base.user.id, otherLesson.id);
-    db.insert(schema.lessonProgress)
-      .values({
-        userId: base.user.id,
-        lessonId: lessons[1].id,
-        status: LessonProgressStatus.InProgress,
-      })
-      .run();
+    markLessonInProgress(base.user.id, lessons[1].id);
 
     const course = findCourse(
       catalog.list(asStudent(), ANYWHERE).courses,
@@ -234,20 +257,7 @@ describe("price and rating", () => {
   });
 
   it("averages ratings to one decimal place", () => {
-    for (const [i, rating] of [5, 4, 4].entries()) {
-      const rater = db
-        .insert(schema.users)
-        .values({
-          name: `Rater ${i}`,
-          email: `rater${i}@example.com`,
-          role: UserRole.Student,
-        })
-        .returning()
-        .get();
-      db.insert(schema.courseRatings)
-        .values({ userId: rater.id, courseId: base.course.id, rating })
-        .run();
-    }
+    rate(base.course.id, [5, 4, 4]);
 
     const course = findCourse(
       catalog.list(asStudent(), ANYWHERE).courses,
