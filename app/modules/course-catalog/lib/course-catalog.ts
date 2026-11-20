@@ -25,12 +25,16 @@ function percent(completed: number, total: number) {
   return total === 0 ? 0 : Math.round((completed / total) * 100);
 }
 
-function viewerProgress(db: Db, userId: number | null, courseIds: number[]) {
+type ListedCourses = { ids: number[]; lessonCounts: Map<number, number> };
+
+function viewerProgress(
+  db: Db,
+  userId: number | null,
+  { ids, lessonCounts }: ListedCourses
+) {
   const progress = new Map<number, Progress>();
   if (userId === null) return progress;
-  const enrolled = findEnrolledCourseIds(db, userId);
-  const enrolledIds = courseIds.filter((id) => enrolled.has(id));
-  const lessonCounts = countLessons(db, enrolledIds);
+  const enrolledIds = findEnrolledCourseIds(db, userId, ids);
   const completed = countCompletedLessons(db, userId, enrolledIds);
   for (const id of enrolledIds) {
     const completedLessons = completed.get(id) ?? 0;
@@ -53,7 +57,7 @@ export function getCourseCatalog(
   const ids = courses.map((course) => course.id);
   const lessonCounts = countLessons(db, ids);
   const ratings = summariseRatings(db, ids);
-  const progress = viewerProgress(db, viewer.userId, ids);
+  const progress = viewerProgress(db, viewer.userId, { ids, lessonCounts });
 
   return {
     courses: courses.map((course) => {

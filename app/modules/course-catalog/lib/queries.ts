@@ -74,14 +74,23 @@ export function countLessons(db: Db, courseIds: number[]) {
   return new Map(rows.map((row) => [row.courseId, row.count]));
 }
 
-/** The ids of the courses the Student has an Enrollment on. */
-export function findEnrolledCourseIds(db: Db, studentId: number) {
+/** Which of the given courses the Student has an Enrollment on. */
+export function findEnrolledCourseIds(
+  db: Db,
+  studentId: number,
+  courseIds: number[]
+) {
   const rows = db
     .select({ courseId: enrollments.courseId })
     .from(enrollments)
-    .where(eq(enrollments.userId, studentId))
+    .where(
+      and(
+        eq(enrollments.userId, studentId),
+        inArray(enrollments.courseId, courseIds)
+      )
+    )
     .all();
-  return new Set(rows.map((row) => row.courseId));
+  return rows.map((row) => row.courseId);
 }
 
 /** courseId -> lessons the Student has completed, for the given courses. */
