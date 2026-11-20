@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createTestDb, seedBaseData, type TestDb } from "~/test/setup";
 import * as schema from "~/db/schema";
+import { addLesson } from "./fixtures";
 
 // lesson-viewer reads the app's shared `db`, so the test swaps in an
 // in-memory one rather than touching data.db.
@@ -19,25 +20,12 @@ let lessonId: number;
 beforeEach(() => {
   db = createTestDb();
   testDb.current = db;
-  lessonId = addLesson(seedBaseData(db).course.id);
+  lessonId = addLesson(db, seedBaseData(db).course.id);
 });
 
 // ─── Fixtures ───
 // No module writes quizzes yet (the instructor quiz route does it inline), so
-// rows go in directly. Kept in one place so a schema change touches only this.
-
-function addLesson(courseId: number) {
-  const mod = db
-    .insert(schema.modules)
-    .values({ courseId, title: "Basics", position: 1 })
-    .returning()
-    .get();
-  return db
-    .insert(schema.lessons)
-    .values({ moduleId: mod.id, title: "What is REST?", position: 1 })
-    .returning()
-    .get().id;
-}
+// rows go in directly.
 
 function addQuiz(title: string) {
   return db
