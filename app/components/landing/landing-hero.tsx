@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { ArrowRight, BookOpen, CheckCircle2, Trophy } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import { IconTile } from "./icon-tile";
 
 const highlights = [
   {
@@ -55,11 +56,9 @@ export function LandingHero({ signedIn }: { signedIn: boolean }) {
         </div>
       </div>
       <ul className="space-y-6 rounded-xl border border-border bg-muted/40 p-8">
-        {highlights.map(({ icon: Icon, title, description }) => (
+        {highlights.map(({ icon, title, description }) => (
           <li key={title} className="flex items-start gap-4">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <Icon className="size-5 text-primary" />
-            </div>
+            <IconTile icon={icon} size="md" />
             <div>
               <p className="font-semibold">{title}</p>
               <p className="text-sm text-muted-foreground">{description}</p>

@@ -1,4 +1,5 @@
 import { BookOpen, GraduationCap, Users } from "lucide-react";
+import { IconTile } from "./icon-tile";
 
 export function LandingStats({
   totalCourses,
@@ -20,11 +21,9 @@ export function LandingStats({
   return (
     <section className="border-y border-border bg-muted/50 py-12">
       <ul className="mx-auto grid max-w-6xl grid-cols-1 gap-8 px-6 text-left sm:grid-cols-3">
-        {stats.map(({ icon: Icon, value, label }) => (
+        {stats.map(({ icon, value, label }) => (
           <li key={label} className="flex items-center gap-4">
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-              <Icon className="size-6 text-primary" />
-            </div>
+            <IconTile icon={icon} size="lg" />
             <div>
               <p className="text-2xl font-bold">{value}</p>
               <p className="text-sm text-muted-foreground">{label}</p>
