@@ -119,7 +119,7 @@ jobs:
           gh pr edit "$PR_NUMBER" --add-label "agent:in-progress"
 
       - name: Checkout the pull request
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # The PR's head, so the review's fixes are commits on top of it.
           # Full history: the review diffs it against the base.
@@ -155,7 +155,7 @@ jobs:
           cat /tmp/review-spec.md
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -167,7 +167,7 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Cache agent-browser's Chrome
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.agent-browser/browsers
           key: agent-browser-0.27.0-${{ runner.os }}
