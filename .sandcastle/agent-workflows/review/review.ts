@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import * as sandcastle from "@ai-hero/sandcastle";
 import { noSandbox } from "@ai-hero/sandcastle/sandboxes/no-sandbox";
@@ -10,6 +11,8 @@ import { diffLines } from "./diff-lines";
 import { reviewSchema } from "./review-schema";
 
 const BASE_REF = required("BASE_REF");
+// The workflow posts this file as the verdict comment.
+const VERDICT = "/tmp/review-verdict.md";
 
 // The agent fixes and commits, writes the verdict file, and hands back the
 // findings it left. The workflow pushes the commits, posts the verdict and
@@ -35,11 +38,22 @@ const git = (...args: string[]): string =>
 // The diff after the agent's commits: the comments land on that.
 const hunks = diffLines(git("diff", `origin/${BASE_REF}...HEAD`));
 const { comments: found }: z.infer<typeof reviewSchema> = result.output;
-const comments = found.filter(({ path: file, line }) => {
-  if (hunks.get(file)?.has(line)) return true;
-  console.error(`Dropping the comment on ${file}:${line}: not in the diff.`);
-  return false;
-});
+const inDiff = ({ path: file, line }: { path: string; line: number }) =>
+  hunks.get(file)?.has(line) ?? false;
+const comments = found.filter(inDiff);
+const outsideDiff = found.filter((comment) => !inDiff(comment));
+
+// GitHub rejects an inline comment outside the diff, so those findings go
+// in the verdict instead: the one place they can land.
+if (outsideDiff.length > 0 && fs.existsSync(VERDICT)) {
+  const section = outsideDiff
+    .map(({ path: file, line, body }) => `### \`${file}:${line}\`\n\n${body}`)
+    .join("\n\n");
+  fs.appendFileSync(
+    VERDICT,
+    `\n\n## Findings outside the diff\n\n${section}\n`
+  );
+}
 
 // The request body for POST /repos/{owner}/{repo}/pulls/{n}/reviews.
 writeJson("review-comments.json", {

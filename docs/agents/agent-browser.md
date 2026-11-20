@@ -40,6 +40,32 @@ agent-browser errors
 agent-browser console
 ```
 
+## Signing in as a seeded user
+
+`npm run db:seed` gives these ids on a fresh database:
+
+| id  | User           | Role       | Use it for                                                                    |
+| --- | -------------- | ---------- | ----------------------------------------------------------------------------- |
+| 1   | Alex Rivera    | admin      | `/admin/*`                                                                    |
+| 2   | Sarah Chen     | instructor | Owns `introduction-to-typescript`                                             |
+| 3   | Marcus Johnson | instructor | Owns `building-rest-apis-with-nodejs`                                         |
+| 5   | Emma Wilson    | student    | Enrolled in `introduction-to-typescript` and `building-rest-apis-with-nodejs` |
+| 6   | James Park     | student    | Enrolled in `introduction-to-typescript` only: a locked lesson elsewhere      |
+
+Lessons worth knowing: `building-rest-apis-with-nodejs` starts at lesson 20,
+and lesson 22 has a quiz. `introduction-to-typescript` starts at lesson 1, and
+lessons 3 and 8 have quizzes.
+
+Switch user by posting to the route the DevUI panel uses, then reload:
+
+```bash
+agent-browser open http://localhost:5173/courses
+agent-browser eval "fetch('/api/switch-user', {method: 'POST', body: new URLSearchParams({userId: '5'})}).then(r => r.status)"
+agent-browser open http://localhost:5173/courses/building-rest-apis-with-nodejs/lessons/20
+```
+
+## Commands
+
 The commands worth knowing: `open`, `click`, `fill`,
 `find <role|text|label|placeholder> …`, `wait`, `get text|html|attr|count|url`,
 `is visible|enabled|checked`, `eval`, `snapshot` (the accessibility tree, with
