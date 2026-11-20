@@ -16,7 +16,7 @@ export const reviewSchema = z
             .int()
             .positive()
             .describe(
-              "A line in the file as it is now, inside a hunk of the diff against the base. A comment outside the hunks is dropped."
+              "A line in the file as it is now, inside a hunk of the diff against the base. A finding outside the hunks goes in the verdict instead."
             ),
           body: z
             .string()

@@ -18,7 +18,8 @@ Form data, search parameters and request bodies get a zod schema before the
 values reach any query. Parse once, at the boundary; after that the value has
 a type and you do not check it again. Coerce numbers through the schema, not
 `Number()`: `Number("")` is `0`, and an empty `lessonId` once opened lesson 0
-for every learner.
+for every learner. `npm run lint:oxlint` catches `Number()` on route params
+and form data; apply the rule to every other untrusted input by hand.
 
 ## Check permission in the action, not only the loader
 
@@ -41,10 +42,6 @@ instructor analytics route only; apply it to every other module by hand. See
 Test setup calls the module's own functions. When the function you need does
 not exist, add it to the module rather than inserting rows directly, so a
 change to how the module stores its data leaves its tests alone.
-
-## Keep files under 5000 tokens
-
-Keep every file under 5000 tokens.
 
 ## Wrap related writes in a transaction
 
@@ -80,7 +77,8 @@ files and `"Pending"` in one.
 
 A function that calls `Date.now()` cannot be tested at a fixed moment. Take
 the time as an argument. The refund window tests failed every night at
-midnight until we did this.
+midnight until we did this. `npm run lint:oxlint` enforces this in
+`app/modules/`; apply it everywhere else by hand.
 
 ## Keep secrets on the server
 
@@ -91,6 +89,23 @@ Anything the browser can read is public. A secret is read only in a
 
 Rendering is for working out what the output is, not for doing something.
 Anything that touches the outside world belongs in an effect or an action.
+
+A loader is part of the render path: it runs on every GET, including a link
+prefetch. A loader reads; a write goes in an action. Marking a lesson in
+progress from the loader means a prefetch of its link marks it too.
+
+## Read a stored value, do not restate it
+
+When the schema stores a value, such as a quiz's `passingScore`, the code
+reads it. A literal that restates it (`score > 0.7`) is right only until
+someone edits the stored value, and then the page and the data disagree.
+
+## Size-limit exemptions follow moved code, never new code
+
+The `.oxlintrc.json` exemption lists cover code that was over a limit before
+the limit existed. When a split moves that code to a new file, its exemption
+can move with it. Code written in the change meets the limits: an exemption
+for it is a finding.
 
 ## Derive, do not store
 

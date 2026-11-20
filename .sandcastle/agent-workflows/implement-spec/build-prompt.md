@@ -15,6 +15,9 @@ Read CODING_STANDARDS.md.
 - The review workflow checks you against the ticket's "Done when". Reread it
   before you stop.
 - `npm run build` must pass too.
+- Before you edit a file, check it is in scripts/oversized-files.txt. If it
+  is, split it first, in a commit of its own that only moves code, and delete
+  its line from that list in the same commit. Then make your change.
 - Commit with `git commit` on the current branch. When the pre-commit hook
   rejects a commit, fix the work and commit again. The hook stays as it is:
   no `--no-verify`, no edits to `.husky/`, `scripts/pre-commit.sh` or

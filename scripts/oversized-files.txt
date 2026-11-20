@@ -1,0 +1,18 @@
+# Files already over the 5000-token limit on main. Each has a ticket to split it.
+# `node scripts/check-file-tokens.js --all` fails when a file here drops under
+# the limit: delete its line in the same commit as the split.
+
+app/lib/refunds.server.test.ts
+app/lib/refunds.server.ts
+app/modules/instructor-analytics/lib/instructor-analytics.ts
+app/modules/instructor-analytics/tests/instructor-analytics.test.ts
+app/routes/courses.$slug.tsx
+app/routes/instructor.$courseId.lessons.$lessonId.quiz.tsx
+app/routes/instructor.$courseId.tsx
+app/routes/instructor.analytics.tsx
+request-logger/README.md
+request-logger/agents.test.ts
+request-logger/agents.ts
+request-logger/proxy.ts
+request-logger/render.ts
+scripts/seed.ts

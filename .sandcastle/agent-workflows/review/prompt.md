@@ -11,21 +11,27 @@ Leave the human reviewer as little as possible. Fix every finding you can on
 `{{BRANCH}}`, and commit each fix through the pre-commit hook. The workflow
 pushes your commits. Leave `.github/` untouched.
 
-Every finding you leave unfixed becomes an inline comment on its file and
-line. You will be asked for them as structured output.
+Each finding has one home. A finding you fixed lives in the verdict. A
+finding you left lives in its inline comment, on its file and line, and
+nowhere else: you will be asked for those as structured output. The workflow
+adds any left finding outside the diff to the verdict for you.
 
 Write your verdict on the branch, after your fixes, to /tmp/review-verdict.md:
 
     ## Standards: PASS | CHANGES REQUESTED
-    One line of reasoning, then the findings, worst first: each one fixed
-    (its commit) or left (its file and line), citing the rule by heading.
+    One line of reasoning. Then the fixed findings, worst first, each with
+    its commit and the rule it broke, by heading. Then one line: "N findings
+    left as inline comments."
 
     ## Spec: PASS | CHANGES REQUESTED
-    One line of reasoning, then the findings, fixed or left.
+    The same shape.
+
+    ## Checks
+    The commands you ran on the final branch, and what they reported.
 
     ## Rules this review wanted and could not find
-    Anything you wanted to fail the change for that no standard covers.
-    The retro reads this list.
+    One line per rule: the rule, worded as a standard. The finding that
+    prompted it is already in its inline comment. The retro reads this list.
 
 When the change shows in the UI, save screenshots as PNGs in /tmp/evidence/.
 Reference each in the verdict by its absolute path, e.g.
