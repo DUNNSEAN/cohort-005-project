@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { cn } from "~/lib/utils";
 import { UserRole } from "~/db/schema";
 import { UserAvatar } from "~/components/user-avatar";
+import { SidebarUserName } from "~/components/sidebar-user-name";
 import { NotificationBell } from "~/components/notification-feed";
 import {
   Bookmark,
@@ -244,9 +245,7 @@ export function Sidebar({
               avatarUrl={currentUser.avatarUrl}
             />
             <div className="flex-1 min-w-0">
-              <div className="truncate text-sm font-medium">
-                {currentUser.name}
-              </div>
+              <SidebarUserName name={currentUser.name} />
               <div className="truncate text-xs capitalize text-sidebar-foreground/50">
                 {currentUser.role}
               </div>
