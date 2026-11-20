@@ -22,6 +22,7 @@ export type CourseCardCourse = {
   instructorAvatarUrl: string | null;
   ratingAverage: number | null;
   ratingCount: number;
+  isEnrolled: boolean;
   progress: number | null;
   completedLessons: number | null;
   lessonCount: number;
@@ -52,9 +53,7 @@ export function CourseCard({
             {course.description}
           </p>
         </CardContent>
-        {course.progress !== null && course.progress > 0 && (
-          <CourseCardProgress course={course} />
-        )}
+        {course.isEnrolled && <CourseCardProgress course={course} />}
         <CourseCardFooter course={course} />
       </Card>
     </Link>
@@ -73,10 +72,9 @@ function CourseCardHeader({
       <div className="mb-1 flex items-center gap-2 text-xs font-medium">
         <span className="text-primary">{course.categoryName}</span>
         {currentUserId !== null && course.instructorId === currentUserId && (
-          <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-            Your Course
-          </span>
+          <CourseCardPill>Your Course</CourseCardPill>
         )}
+        {course.isEnrolled && <CourseCardPill>Enrolled</CourseCardPill>}
       </div>
       <h3 className="text-lg font-semibold leading-tight group-hover:text-primary">
         {course.title}
@@ -133,5 +131,13 @@ function CourseCardFooter({ course }: { course: CourseCardCourse }) {
         )}
       </span>
     </CardFooter>
+  );
+}
+
+function CourseCardPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+      {children}
+    </span>
   );
 }
